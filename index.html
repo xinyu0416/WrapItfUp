@@ -8270,6 +8270,7 @@ root.WIUWorkflowPanel=function(h){
     if(!current(p).ready)throw Error('示範接線檢查失敗。');
     p=dependency('WIUWorkbook','workbook.js').asUser(p);
     p.top='example_top';p.workbook.example='public-example';
+    p.workbook.graphPositions=Object.fromEntries(p.instances.map((inst,i)=>[inst.id,{x:360,y:140+i*240}]));
     return p;
   }
   return {createTemplate,create,createLegacy:create,current,advance,back,render};
