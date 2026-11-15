@@ -251,6 +251,8 @@ function applyDiagram(project,id,raw,parsed){
  const structural=interfaceKey(old)!==interfaceKey(next);
  const sourceEdit=id!=='top'&&!old.interfaceOnly&&structural?rtlInterfaceEditor().patch(p,old,next,physicalModules,mayInstantiate):null;
  const changes=[];
+ const removed=old.ports.filter(port=>!ports.some(x=>x.id===port.id));
+ const removal=id==='top'&&removed.length?A().removeNets(p,removed.map(x=>x.id)):null;
  const renames=old.ports.flatMap(port=>{const updated=ports.find(x=>x.id===port.id);return updated&&updated.name!==port.name?[{id:port.id,before:port.name,after:updated.name}]:[];});
  if(id==='top'&&renames.length){
   // Two phases avoid cascading a->aa and aa->aaaa through the first new name.
@@ -259,7 +261,7 @@ function applyDiagram(project,id,raw,parsed){
   for(const r of renames){let name;do{name='__wiu_batch_rename_'+(++n);}while(occupied.includes(name));A().renameNet(p,r.id,name);temporary.push(r);}
   for(const r of temporary)A().renameNet(p,r.id,r.after);
  }else if(renames.length){const mapping=new Map(renames.map(r=>[r.before,r.after])),instances=new Set(p.instances.filter(i=>i.module===old.name).map(i=>i.id));for(const c of p.connections)if(instances.has(c.instance)&&mapping.has(c.port))c.port=mapping.get(c.port);}
- for(const port of old.ports){const updated=ports.find(x=>x.id===port.id);if(!updated){changes.push(port.name+' 已移除；原接線保留待修正');continue;}if(port.name!==updated.name)changes.push(port.name+' → '+updated.name);if(port.range!==updated.range||port.direction!==updated.direction)changes.push(updated.name+' 的位寬／方向已更新，請檢查接線');}
+ for(const port of old.ports){const updated=ports.find(x=>x.id===port.id);if(!updated){changes.push(port.name+(id==='top'?' 已移除，相關引用一併清理':' 已移除；原接線保留待修正'));continue;}if(port.name!==updated.name)changes.push(port.name+' → '+updated.name);if(port.range!==updated.range||port.direction!==updated.direction)changes.push(updated.name+' 的位寬／方向已更新，請檢查接線');}
  if(id==='top'){
   if(ports.some(x=>p.nets.some(n=>n.direction==='wire'&&n.name===x.name)))throw Error('Top 接腳與內部線名稱重複。');
   p.top=next.name;p.parameters=next.parameters;p.nets=p.nets.filter(n=>n.direction==='wire').concat(ports);
@@ -288,7 +290,7 @@ function applyDiagram(project,id,raw,parsed){
  }
  // The diagram retains editable geometry, not a second connectivity graph.
  d.nonPortIds=signals.filter(s=>!ports.some(p=>p.id===s.id)).map(s=>s.id);
- p.workbook.diagrams[id]=d;p.orgEdited=true;return {project:normalize(p,project),changes};
+ p.workbook.diagrams[id]=d;p.orgEdited=true;return {project:normalize(p,project),changes,removal};
 }
 function stable(value){if(Array.isArray(value))return '['+value.map(stable).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+stable(value[k])).join(',')+'}';return JSON.stringify(value);}
 function crc(text){let c=0xffffffff;for(const b of new TextEncoder().encode(text)){c^=b;for(let n=0;n<8;n++)c=(c>>>1)^((c&1)?0xedb88320:0);}return ((c^0xffffffff)>>>0).toString(16).padStart(8,'0');}

@@ -1,6 +1,6 @@
 {
   "name": "wrapitfup",
-  "version": "0.125.0",
+  "version": "0.126.0",
   "private": true,
   "description": "WrapItfUp — module interfaces, Top wiring and portable RTL handoff",
   "engines": {"node": ">=22.12.0"},

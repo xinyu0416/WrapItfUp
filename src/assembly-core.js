@@ -206,7 +206,7 @@
     const top=resolveParameters({parameters:topParameters(p)},{}),resolved=resolveParameters(m,i.parameters||{},top.context),names=new Set(topParameters(p).map(x=>x.name));
     return arr(m.parameters).map(def=>{const explicit=Object.prototype.hasOwnProperty.call(i.parameters||{},def.name),expression=str(explicit?(instance.parameters||{})[def.name]:(arr(project.modules).find(x=>x.name===instance.module)?.parameters||[]).find(x=>x.name===def.name)?.value??def.value),refs=[];
       if(explicit){try{const walk=n=>{if(!n||typeof n!=='object')return;if(n.kind==='ref'&&names.has(n.name))refs.push(n.name);for(const v of Object.values(n)){if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==='object')walk(v);}};walk(parseExpression(expression));}catch(_){}}
-      const source=def.local?'local':!explicit?'default':refs.length?'top':'override',sourceLabel={local:'模組 localparam',default:'模組預設',top:'引用 Top',override:'獨立覆寫'}[source],error=resolved.errors.find(e=>e.name===def.name)?.message;
+      const source=def.local?'local':!explicit?'default':refs.length?'top':'override',sourceLabel={local:'模組 localparam',default:'使用 module 預設值',top:'此 instance 覆寫（引用 Top）',override:'此 instance 的覆寫值'}[source],error=resolved.errors.find(e=>e.name===def.name)?.message;
       return {name:def.name,expression,value:resolved.context[def.name],source,sourceLabel,refs:[...new Set(refs)],error,text:def.name+' = '+(error?'未解析':resolved.context[def.name])+'  ·  '+sourceLabel+' ('+expression+')'};
     });
   }

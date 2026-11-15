@@ -1,8 +1,8 @@
 # WrapItfUp
 
-**Public r125 · Module interfaces → Top wiring → RTL and diagram handoff**
+**Public r126 · Module interfaces → Top wiring → RTL and diagram handoff**
 
-[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r125.md)
+[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r126.md)
 
 WrapItfUp 把子模組介面、Top 實例接線、RTL 與圖面放在同一份設計中。先定義或匯入模組，放入實例，完成接線，再帶走可繼續編輯的專案與交付檔案。
 
@@ -16,7 +16,8 @@ This repository contains the maintainable application source, public examples, r
 2. 建立設計或匯入 RTL。模組列表管理**模組定義**；Top 接線頁管理**實例與連線**。
 3. 在名稱欄直接修改可編輯名稱。匯入 RTL 的來源限制會顯示原因，不能假裝改名成功。
 4. 修改訊號、位寬、方向、群組和參數，再到 Top 接線頁完成連接並查看檢查結果。
-5. 儲存 `.wiu.json` 專案；由交付功能下載 RTL、VBS 或完整交付包。
+5. 儲存 `.wiu.json` 專案；由「產生 RTL／gen_top」下載 RTL、VBS 或 Linux 工作包。
+6. 文字傳送時依序執行 `bash`、接收器、資料批次、`CHECK`，每次貼上後按 Enter。貼回終端回報核對檔案數與 SHA-256，再於 Linux 執行產生與驗證。網站檢查不代表 Linux 已執行。
 
 ### 主要能力
 
@@ -25,14 +26,18 @@ This repository contains the maintainable application source, public examples, r
 | 模組介面 | 訊號表、群組、參數化位寬、方向、RTL 匯入及介面圖 |
 | Top 組裝 | 同一模組的多個實例、接線、常數、明確空接、Top I/O、參數覆寫 |
 | 編輯 | 拖移、搜尋／取代、內嵌改名、展開／收合、Undo／Redo |
+| 刪除 Top 接腳 | 列出受影響接線、assign、Empty 設定，確認後整批清理；一次復原 |
+| 接線建議 | 核對方向、位寬、instance／通道；多候選明確選擇，預覽來源 → 目的 |
 | 刪除模組 | 同時處理受影響的實例、接線與圖面資料；整筆操作可復原 |
 | 檢查 | 名稱與連線問題、未完成接線、來源及生成限制提示 |
 | 交付 | Top Verilog、Empty/stub、org、output.cfg、外部工具執行輔助檔及 Visio VBS |
 | 保存 | 完整專案下載、重新開啟、瀏覽器本機草稿 |
 
+舊專案如有失去接腳的 Empty 設定，可在「設定暫代輸出 → 只看錯誤」直接移除或重新指定。參數摘要會區分 module 預設與此 instance 的覆寫值。
+
 ### 名稱與檔案用途
 
-產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r125-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
+產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r126-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
 
 | 檔案 | 用途 |
 | --- | --- |
@@ -74,6 +79,8 @@ Open [WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) and choose the complete
 
 The module list owns definitions; the Top view owns instances and wiring. Editable names use inline fields. Deleting a definition can remove its dependent instances and connections as one undoable operation. Source-owned definitions retain their import restrictions.
 
+For Linux text transfer, follow the separate `bash`, receiver, data batches and `CHECK` steps, pressing Enter after each paste. Clipboard success is separate from receiver confirmation, file hashes, generation, compilation and simulation. Orphan Empty settings can be removed or reassigned in the UI. Top-pin deletion previews related connections, assignments and Empty settings and commits one undoable transaction.
+
 ### Capabilities and formats
 
 - Define interfaces with signals, groups, directions, widths, and parameters; import supported RTL.
@@ -88,7 +95,7 @@ Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z redoes, Ctrl+Y also redoes on Windows/Linux.
 
 The public edition excludes internal manuals, original external-tool code, internal teaching projects, private verification records, and proprietary stencils. The bundled example is generic. Design processing runs in the browser, with no application design-upload endpoint or analytics; normal hosting requests still reach the hosting provider.
 
-External gen_top/gen_empty tools are separate user-provided dependencies. Existing org directive syntax remains intact. Exporting compatible files does not establish external-tool execution, successful RTL simulation, or functional equivalence. Visio automation requires a supported Windows/Visio environment. See the [verification report](docs/VERIFICATION-r125.md) for what this release actually checks.
+External gen_top/gen_empty tools are separate user-provided dependencies. Existing org directive syntax remains intact. Exporting compatible files does not establish external-tool execution, successful RTL simulation, or functional equivalence. Visio automation requires a supported Windows/Visio environment. See the [verification report](docs/VERIFICATION-r126.md) for what this release actually checks.
 
 ## Repository / 專案結構
 
@@ -126,7 +133,7 @@ npm run build:offline
 npm run release:check
 ```
 
-`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r125-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r125-offline` artifact from a successful Actions run while it remains available.
+`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r126-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r126-offline` artifact from a successful Actions run while it remains available.
 
 ### GitHub Pages
 

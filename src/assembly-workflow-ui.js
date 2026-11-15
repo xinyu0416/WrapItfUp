@@ -56,7 +56,17 @@ root.WIUWorkflowPanel=function(h){
   function example(){h.startPractice(root.WIUFocusGuide.createTemplate(),'graph');h.dialog.close();}
   function topInterface(){h.openDialog('先建立 Top 介面','<p>每行 <code>方向 名稱 範圍<\/code>，例如 <code>input req [63:0]<\/code>；也能貼上 module 的完整介面。只增加／核對宣告，既有接線保留。<\/p><label>Top 名稱<input id="f-top-name" value="'+esc(get().top)+'" spellcheck="false"><\/label><label>介面清單<textarea id="f-interface" spellcheck="false" placeholder="input clk_a&#10;input rst_n_a&#10;input req [63:0]&#10;output ack [63:0]"><\/textarea><\/label>','預覽介面',()=>{const p=A.clone(get());p.top=$('#f-top-name').value.trim();p.entryRoute='top-down';if(!C.validName(p.top))throw Error('Top 名稱不是有效識別字。');applyPlan('核對 Top 介面',F.addTopInterface(p,$('#f-interface').value),'ports');});}
   function moduleInterface(){h.openDialog('先定義子模組介面','<p>RTL 還沒完成也能先接線。這裡生成標記清楚的暫代 RTL，輸出不預設接零；介面骨架尚未實作功能。<\/p><div class="a-grid2"><label>Module 名稱<input id="f-module-name" placeholder="例如 cemac_core"><\/label><label>建立幾個 instances<input id="f-module-count" type="number" min="1" max="64" value="1"><\/label><\/div><label>介面清單<textarea id="f-module-ports" spellcheck="false" placeholder="input clk&#10;input req [7:0]&#10;output ack [7:0]"><\/textarea><\/label>','預覽暫代模組',()=>{const p=A.clone(get()),name=$('#f-module-name').value.trim(),n=Number($('#f-module-count').value);if(p.modules.some(m=>m.name===name))throw Error('同名 module 已存在。請用匯入 RTL 更新介面。');if(!Number.isInteger(n)||n<1||n>64)throw Error('Instance 數量請填 1～64。');const result=F.makePlaceholder(name,$('#f-module-ports').value,{config:p.defineConfig});if(result.issues?.some(x=>x.severity==='error'))throw Error(result.issues.map(x=>x.message).join('\n'));p.modules.push(result.module);p.rtlSources.push({name:result.filename,text:result.source});for(let i=0;i<n;i++)p.instances.push({id:'f_'+name+'_'+i,name:name+'_inst'+(n===1?'':'_'+i),module:name,parameters:{}});applyPlan('核對暫代介面',{project:p,changes:[name+'：'+result.module.ports.length+' ports，建立 '+n+' instances。'],issues:result.issues},'modules');});}
-  function auto(){const plan=F.previewAutoConnect(get());h.openDialog('預覽同名接線與新宣告','<p>只提出尚未設定的接腳；同名不代表電路用途相同。共用 clock/reset 也請先確認時脈域。<\/p>'+(plan.groups.length?'<div class="a-tablebox"><table class="a-table"><thead><tr><th>套用<\/th><th>訊號<\/th><th>宣告／接線<\/th><th>原因<\/th><\/tr><\/thead><tbody>'+plan.groups.map(g=>'<tr><td><input type="checkbox" data-flow-group="'+esc(g.id)+'" checked aria-label="選擇 '+esc(g.name)+'"><\/td><td>'+esc(g.name)+'<\/td><td>'+esc(g.net?g.net.direction+' '+(g.net.range||'1 bit'):'沿用既有宣告')+' · '+g.bindings.length+' pins<\/td><td>'+esc(g.reason)+'<\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>':'<p>目前沒有可安全提出的同名接線。可以在連線表選取 pins，建立命名線或分配切片。<\/p>')+(plan.skipped.length?'<h3>留給你決定<\/h3>'+plan.skipped.map(g=>'<div class="a-note a-warn"><b>'+esc(g.name)+'<\/b>：'+esc(g.reason)+'<details><summary>接腳位置<\/summary>'+g.endpoints.map(esc).join('<br>')+'<\/details><\/div>').join(''):'')+errors(plan.issues),'套用選取項目',()=>{const ids=$$('[data-flow-group]').filter(x=>x.checked).map(x=>x.dataset.flowGroup);if(!ids.length)throw Error('請先選擇一組接線。');const r=F.applyAutoConnect(get(),ids);if(r.issues.some(i=>i.severity==='error'))throw Error(r.issues.map(i=>i.message).join('\n'));h.commit(()=>h.setProject(r.project,'connections'));h.dialog.close();});}
+  function auto(){
+    const R=root.WIUConnectionReview,original=get(),signature=JSON.stringify(original),plan=R.suggestions(original);
+    const table=rows=>'<div class="a-tablebox"><table class="a-table" style="table-layout:fixed;width:100%"><thead><tr><th style="width:42%">目的接腳</th><th>選擇來源</th></tr></thead><tbody>'+rows.map(r=>'<tr><td style="overflow-wrap:anywhere"><b>'+esc(r.pin.instanceName+'.'+r.pin.port)+'</b><small style="display:block">'+esc(r.pin.direction+' · '+(r.pin.width||'?')+' bit')+'</small></td><td>'+(r.candidates.length?'<select style="width:100%;min-width:0;max-width:100%" data-r126-choice="'+plan.rows.indexOf(r)+'" aria-label="選擇 '+esc(r.pin.instanceName+'.'+r.pin.port)+' 的接線"><option value="">保持未設定'+(r.candidates.length>1?'（'+r.candidates.length+' 個候選）':'')+'</option>'+r.candidates.map(o=>'<option value="'+o.id+'">'+esc(o.direction==='output'?'連到 Top.'+o.net:o.sourceLabel)+(o.kind==='top'?'（新增 Top 接腳）':'')+'</option>').join('')+'</select><small data-r126-reason style="display:block;overflow-wrap:anywhere;margin-top:6px">'+esc(r.candidates.length>1?'有多個來源，請確認設計用途。':r.candidates[0].reason)+'</small>':esc(r.reason||'沒有方向及位寬相容的候選'))+'</td></tr>').join('')+'</tbody></table></div>';
+    const inputs=plan.rows.filter(r=>r.pin.direction!=='output'),outputs=plan.rows.filter(r=>r.pin.direction==='output');
+    h.openDialog('核對來源 → 目的','<p>依方向、位寬、instance 與通道名稱提出建議。請選擇要套用的來源；已有接線不變。</p>'+table(inputs)+(outputs.length?'<details><summary>進階：將 '+outputs.length+' 個未接 output 對外提供為 Top 接腳</summary><p>內部連線的來源會隨 input 一起接好，通常不需要在這裡再提升為 Top。</p>'+table(outputs)+'</details>':''),'預覽選取接線',()=>{
+      if(JSON.stringify(get())!==signature)throw Error('專案已變更，請重新檢查。');const ids=$$('[data-r126-choice]').map(x=>x.value).filter(Boolean);if(!ids.length)throw Error('請選擇至少一個候選。');const result=R.apply(get(),ids);
+      h.openDialog('確認接線與 Top 介面變更','<p>'+result.changes.length+' 筆綁定；一次套用、一次復原。</p><table class="a-table" style="table-layout:fixed;width:100%;overflow-wrap:anywhere"><thead><tr><th>來源</th><th>目的</th><th>宣告</th></tr></thead><tbody>'+result.options.map(o=>'<tr><td>'+esc(o.sourceLabel)+'</td><td>'+esc(o.direction==='output'?'Top.'+o.net:o.target.instanceName+'.'+o.target.port)+'</td><td>'+esc(o.kind==='top'?'新增 Top '+o.direction:o.kind==='internal'?'內部連線，不增加 Top 接腳':'沿用宣告')+'</td></tr>').join('')+'</tbody></table><details><summary>新增宣告與完整綁定</summary><pre>'+esc(result.nets.map(n=>n.direction+' '+(n.range||'')+' '+n.name).concat(result.changes.map(c=>get().instances.find(i=>i.id===c.instance)?.name+'.'+c.port+' = '+c.expr)).join('\n'))+'</pre></details>','確認套用',()=>{if(JSON.stringify(get())!==signature)throw Error('專案已變更，請重新預覽。');h.commit(()=>h.setProject(result.project,'connections'),'已套用選取接線；可一次復原。');h.dialog.close();});
+    });
+    for(const select of $$('[data-r126-choice]'))select.addEventListener('change',()=>{const option=plan.options.find(o=>o.id===select.value);select.parentElement.querySelector('[data-r126-reason]').textContent=option?option.reason:'保持未設定；不修改此接腳。';});
+  }
+
   function quickInstance(moduleName){
     root.WIUBridge?.finish();
     const plan=F.planInstances(get(),moduleName,{count:1});
@@ -106,59 +116,44 @@ root.WIUWorkflowPanel=function(h){
     });
   }
 
-  // r94: one primary copy action per step. Copying is NOT remote receipt.
-  let transfer=null,transferIndex=0,transferPhase=0,transferSignature='',transferBatchSize=5,transferStatus='',transferLastStart=0;
+  // Copy state, terminal receipt, generation and verification are distinct.
+  let transfer=null,transferIndex=0,transferPhase=-1,transferSignature='',transferBatchSize=5,transferStatus='',transferLastStart=0,transferCopied=false,transferBusy=false;
   function transferStart(fresh=false){
     if(!fresh&&transfer&&transferSignature===JSON.stringify(files())){transferView();return;}
-    h.openDialog('傳送工作包到 Linux','<p>沒有辦法直接傳 ZIP 時，使用文字傳送。<\/p><label>Linux 接收資料夾<input id="f-linux-target" value="'+esc(transfer?.target||'/tmp')+'" spellcheck="false" placeholder="/tmp"><\/label>','開始傳送',async()=>{
-      const input=files();transfer=await root.WIUTransfer.prepare(input,$('#f-linux-target').value.trim());
-      transferSignature=JSON.stringify(input);transferIndex=0;transferLastStart=0;transferPhase=0;transferStatus='';transferView();
+    h.openDialog('傳送工作包到 Linux','<p>接下來依序切換 bash、啟動接收、貼上資料及核對 SHA-256。</p><label>Linux 已存在的接收資料夾<input id="f-linux-target" value="'+esc(transfer?.target||'/tmp')+'" spellcheck="false"></label>','開始傳送',async()=>{
+      const input=files();transfer=await root.WIUTransfer.prepare(input,$('#f-linux-target').value.trim());transferSignature=JSON.stringify(input);transferIndex=0;transferLastStart=0;transferPhase=-1;transferStatus='';transferCopied=false;transferView();
     });
   }
   function transferView(){
-    if(!transfer)return;
-    let body='';
-    if(transferPhase===0){
-      body='<h3>1. 在 Linux 啟動接收<\/h3><p>複製命令並在 Linux 終端貼上、按 Enter。<\/p><div class="r94-transfer-details"><code>'+esc(transfer.target)+'<\/code> · '+transfer.files.length+' 份檔案 · '+transfer.chunks.length+' 小段（已自動壓縮）<\/div><textarea readonly id="r68-receiver" rows="3">'+esc(transfer.command)+'<\/textarea><button class="a-primary" data-action="linux-transfer-copy" data-kind="command">複製接收命令<\/button>';
-    } else if(transferPhase===1){
-      const last=Math.min(transfer.chunks.length,transferIndex+transferBatchSize);
-      body='<h3>2. 複製並貼到 Linux<\/h3><p>網站會自動選下一批；不用再按「下一批」。<\/p><progress max="'+transfer.chunks.length+'" value="'+transferIndex+'"><\/progress><p role="status" id="r85-transfer-copy-status">本機已複製 '+transferIndex+'/'+transfer.chunks.length+' 段。<b>Linux 是否收到，請以終端 RECEIVED 為準。<\/b><\/p>'+
-      '<textarea id="r68-segment" readonly rows="5" aria-label="下一批傳送內容">'+esc(transfer.chunks.slice(transferIndex,last).join('\n'))+'<\/textarea><button class="a-primary" data-action="linux-transfer-copy" data-kind="segment">複製下一批（'+(Math.floor(transferIndex/transferBatchSize)+1)+'／'+Math.ceil(transfer.chunks.length/transferBatchSize)+'）<\/button>'+
-      '<details><summary>重新貼上／恢復<\/summary><button data-action="linux-transfer-retry">重新複製上一批<\/button><button data-action="linux-transfer-command">取得接收命令<\/button><button data-action="linux-transfer-restart">重新開始<\/button><p>重新貼相同內容不會覆寫已收到的段落。<\/p><\/details>';
-    } else {
-      body='<h3>3. 在 Linux 確認接收<\/h3><p>全部資料已複製到本機剪貼簿，但<strong>尚未證明 Linux 已接收<\/strong>。請將 CHECK 貼到接收器，確認出現 COMPLETE。<\/p><button class="a-primary" data-action="linux-transfer-copy" data-kind="check">複製 CHECK<\/button>'+
-      '<p class="r94-transfer-details">預期接收資料夾：<code>'+esc(transfer.directory)+'<\/code><\/p><label>可選：貼上終端的 COMPLETE 那一行<input id="r94-linux-receipt" placeholder="COMPLETE: '+esc(transfer.directory)+'" spellcheck="false"><\/label><button data-action="linux-transfer-verify">核對 Linux 回報<\/button><p id="r94-linux-receipt-state" role="status">Linux 待確認<\/p><details><summary>缺段或要重傳<\/summary><button data-action="linux-transfer-retry">返回上一批<\/button><button data-action="linux-transfer-command">取得接收命令<\/button><button data-action="linux-transfer-restart">重新開始<\/button><p>接收器會列出缺少的段號；重新貼上相同內容安全。<\/p><\/details>';
-    }
+    if(!transfer)return;let body='',kind='',content='';
+    const last=Math.min(transfer.chunks.length,transferIndex+transferBatchSize);
+    if(transferPhase===-1){kind='shell';content='bash';body='<h3>1. 先切換 bash</h3><p>公司預設 csh 不支援下一步的多行命令。複製 <code>bash</code> 到 Linux，<b>按 Enter</b>，看到新提示字元後繼續。完成後可用 exit 返回原 shell。</p>';}
+    else if(transferPhase===0){kind='command';content=transfer.command;body='<h3>2. 啟動 Linux 接收器</h3><p>確認目前在 bash。貼上命令後<b>按 Enter</b>；等 Linux 顯示 <code>Linux receiver ready</code> 再繼續。</p><small>'+esc(transfer.target)+' · '+transfer.files.length+' 個檔案 · '+transfer.chunks.length+' 段</small>';}
+    else if(transferPhase===1){kind='segment';content=transfer.chunks.slice(transferIndex,last).join('\n');body='<h3>3. 貼上第 '+(Math.floor(transferIndex/transferBatchSize)+1)+' 批，共 '+Math.ceil(transfer.chunks.length/transferBatchSize)+' 批</h3><p>複製這批資料，貼到正在執行的接收器，<b>按 Enter</b>。Linux 應顯示 RECEIVED '+last+'/'+transfer.chunks.length+'；未收到時先重貼這一批。</p><progress max="'+transfer.chunks.length+'" value="'+transferIndex+'"></progress>';}
+    else {kind='check';content='CHECK';body='<h3>4. 校驗完整檔案</h3><p>貼上 CHECK 後<b>按 Enter</b>。請核對 Linux 的檔案數、SHA-256 與 COMPLETE 回報。</p>';}
+    body+='<textarea id="r126-transfer-content" readonly rows="'+(kind==='shell'||kind==='check'?1:5)+'" aria-label="目前要貼到 Linux 的內容">'+esc(content)+'</textarea><button class="a-primary" data-action="linux-transfer-copy" data-kind="'+kind+'">'+(transferCopied?'再次複製':'複製這一步')+'</button><p id="r126-copy-status" role="status">'+esc(transferStatus||'尚未複製；網站無法直接讀取 Linux 狀態。')+'</p>';
+    if(transferPhase<2)body+='<button data-action="r126-transfer-continue">'+(transferPhase===-1?'已在 Linux 執行 bash → 下一步':transferPhase===0?'已看到 receiver ready → 貼資料':'已貼上、按 Enter 並核對 RECEIVED → 下一批')+'</button>';
+    else body+='<label>貼回本次終端回報<textarea id="r94-linux-receipt" rows="4" placeholder="RECEIVED …\nVerified '+transfer.files.length+' files and all SHA-256 hashes.\nCOMPLETE: '+esc(transfer.directory)+'"></textarea></label><button data-action="linux-transfer-verify">核對接收與校驗回報</button><p id="r94-linux-receipt-state" role="status">Linux 已接收：待確認 · 檔案校驗：待確認 · 產生：未確認 · 編譯／模擬：未確認</p><button data-action="linux-transfer-guide">接著在 Linux 產生 RTL</button>';
+    body+='<details><summary>重傳與接收資訊</summary><p>'+esc(transfer.directory)+'</p><button data-action="linux-transfer-retry">重貼上一批</button><button data-action="linux-transfer-command">重新啟動接收器</button><p>重貼相同段落可恢復，不會覆寫不同的檔案。</p></details>';
     h.openDialog('傳送到 Linux',body);
   }
   async function transferCopy(kind){
-    if(!transfer)return;
-    const start=transferIndex,last=Math.min(transfer.chunks.length,start+transferBatchSize);
-    const content=kind==='command'?transfer.command:kind==='check'?'CHECK':transfer.chunks.slice(start,last).join('\n');
-    const field=$(kind==='command'?'#r68-receiver':kind==='segment'?'#r68-segment':null);
-    try{
-      if(!navigator.clipboard?.writeText)throw Error('瀏覽器未授權寫入剪貼簿');
-      await navigator.clipboard.writeText(content);
-      if(kind==='command')transferPhase=1;
-      if(kind==='segment'){
-        transferLastStart=start;transferIndex=last;
-        if(transferIndex===transfer.chunks.length)transferPhase=2;
-      }
-      transferStatus='已複製到本機剪貼簿，仍須貼到 Linux。';
-      if(kind==='check'){h.toast('已複製 CHECK；請確認 Linux 顯示 COMPLETE，網站目前無法直接讀取遠端結果。');}
-      else transferView();
-    }catch(e){
-      transferStatus='本機複製失敗：'+e.message+'。請手動選取內容再複製。';
-      if(field){field.focus();field.select();}
-      const status=$('#r85-transfer-copy-status');if(status)status.textContent=transferStatus;
-      else h.toast(transferStatus);
-    }
+    if(!transfer||transferBusy)return;
+    const field=$('#r126-transfer-content'),status=$('#r126-copy-status'),button=$('[data-action="linux-transfer-copy"]');
+    if(!field||!status)return;
+    transferBusy=true;if(button)button.disabled=true;status.textContent='正在複製…';
+    try{await navigator.clipboard.writeText(field.value);if(!status.isConnected)return;transferCopied=true;transferStatus='已複製到本機；請貼到 Linux 並按 Enter。尚未核實 Linux 接收。';status.textContent=transferStatus;}
+    catch(e){if(!status.isConnected)return;transferStatus='複製失敗：'+e.message+'。可手動選取文字複製。';status.textContent=transferStatus;field.select();}
+    finally{transferBusy=false;if(button?.isConnected)button.disabled=false;}
+  }
+  function transferContinue(){
+    // This is an explicit user acknowledgement, not remote telemetry.
+    if(transferPhase===-1)transferPhase=0;else if(transferPhase===0)transferPhase=1;else if(transferPhase===1){transferLastStart=transferIndex;transferIndex=Math.min(transfer.chunks.length,transferIndex+transferBatchSize);if(transferIndex===transfer.chunks.length)transferPhase=2;}
+    transferCopied=false;transferStatus='';transferView();
   }
   function transferVerify(){
-    const line=$('#r94-linux-receipt')?.value.trim()||'',status=$('#r94-linux-receipt-state');
-    if(!status)return;
-    if(line==='COMPLETE: '+transfer.directory){status.textContent='已核對貼回的 Linux COMPLETE 回報；網站沒有直接連接 Linux。編譯與模擬仍待驗證。';}
-    else status.textContent='尚未取得符合此次資料夾的 COMPLETE；請核對 Linux 終端後重試。';
+    const receipt=root.WIUTransfer.receipt(transfer,$('#r94-linux-receipt')?.value||'');
+    $('#r94-linux-receipt-state').textContent='貼回回報核對：Linux 已接收 '+(receipt.received?'符合':'待確認')+' · '+(receipt.verified?'檔案 SHA-256 校驗符合':'檔案 SHA-256 校驗待確認')+' · 產生、編譯／模擬仍未確認。網站沒有直接連接 Linux。';
   }
 
   function groupedFiles(entries){
@@ -186,7 +181,7 @@ root.WIUWorkflowPanel=function(h){
       '<div class="r69-delivery-methods"><button class="a-primary a-bundle-cta" data-action="bundle-download" '+(v.errors.length?'disabled':'')+'>下載 Linux 工作包<\/button><button data-action="linux-transfer" '+(v.errors.length?'disabled':'')+'>無法傳 ZIP？用文字傳送<\/button>'+root.WIUExperience.commandButton('bundle-show-files',{disabled:!entries.length})+'</div>'+
       (v.errors.length?'<p class="r68-disabled-note">先處理上方錯誤後再下載。<\/p>':'')+
       '<details class="a-reference-details"><summary>進階設定 · Linux 工具與來源<\/summary><div class="r69-config-summary"><div><strong>Linux 工具與來源<\/strong><code>'+esc(c.genTop)+'<\/code> · <code>'+esc(c.python)+'<\/code><br><span>'+c.sources.filter(x=>x.path).length+' 個外部來源 link · '+(c.launcher.length?'使用執行 wrapper':'直接執行')+'<\/span><\/div><button data-action="bundle-script-settings">修改工具路徑<\/button><\/div><\/details>'+
-      '<div class="r69-config-summary"><div><strong>Empty 輸出<\/strong><span>'+custom+' 個自訂 · '+(outputPorts.length-custom)+' 個預設接 0<\/span><\/div><button data-action="bundle-stub-edit" '+(!outputPorts.length?'disabled':'')+'>設定暫代輸出<\/button><\/div>'+
+      '<div class="r69-config-summary"><div><strong>Empty 輸出<\/strong><span>'+custom+' 個自訂 · '+(outputPorts.length-custom)+' 個預設接 0<\/span><\/div><button data-action="bundle-stub-edit" '+(!outputPorts.length&&!cfg.outputTies.length?'disabled':'')+'>設定暫代輸出<\/button><\/div>'+
       '<div class="r69-after-transfer"><button data-action="linux-guide">Linux 執行指令<\/button><\/div>'+
       (v.warnings?.length?'<details class="a-reference-details"><summary>'+v.warnings.length+' 項警告 · 可繼續交付<\/summary>'+errors(v.warnings)+'<\/details>':'')+
       '<details class="a-reference-details"><summary>正常 / Empty 用法與接線核對<\/summary>'+deliveryOverview(p,cfg,v.outputs||[])+'<p class="a-hint">正常與 .empty.v 為同名模組，必須擇一編譯。缺少 .output.cfg 時，公司工具會將 Empty 所有輸出接零；交付助手會先阻擋。刻意全部接零仍需保留空 cfg。<\/p><button data-action="bundle-cfg-import" '+(!outputPorts.length?'disabled':'')+'>貼上既有 cfg<\/button><\/details>'+
@@ -215,7 +210,7 @@ root.WIUWorkflowPanel=function(h){
   function emptyDelivery(){
     const p=get(),v=B.validate(p),custom=v.outputs.filter(x=>!x.defaulted).length;
     return '<section class="r118-delivery-panel"><h2>Empty 暫代電路</h2><p>保留 Top 對外介面，輸出依 cfg 設定。這份暫代 RTL 不保留正常 Top 的子模組與接線；正常與 Empty 擇一編譯。</p>'+
-      '<div class="a-actions"><button data-action="bundle-stub-edit" '+(!v.outputs.length?'disabled':'')+'>設定 Empty 輸出</button><button data-action="bundle-cfg-import" '+(!v.outputs.length?'disabled':'')+'>匯入 output.cfg</button></div>'+
+      '<div class="a-actions"><button data-action="bundle-stub-edit" '+(!v.outputs.length&&!B.normalize(p.bundleConfig).outputTies.length?'disabled':'')+'>設定 Empty 輸出</button><button data-action="bundle-cfg-import" '+(!v.outputs.length?'disabled':'')+'>匯入 output.cfg</button></div>'+
       '<p>'+v.outputs.length+' 個 outputs · '+custom+' 個自訂 · '+(v.outputs.length-custom)+' 個預設全 0</p>'+
       (v.errors.length?errors(v.errors):'<p class="r94-status">Empty 表達式檢查通過 · 網站生成，尚未在公司工具執行</p>')+
       '<div class="a-actions"><button class="a-primary" data-action="delivery-empty-download" '+(v.errors.length?'disabled':'')+'>下載 Empty RTL＋cfg</button><button data-action="delivery-empty-preview" '+(v.errors.length?'disabled':'')+'>預覽／複製 Empty RTL</button><button data-action="delivery-empty-cfg-preview" '+(v.errors.length?'disabled':'')+'>預覽／複製 cfg</button></div>'+
@@ -238,10 +233,11 @@ root.WIUWorkflowPanel=function(h){
       h.openDialog('Linux 驗證命令','<p>請在工作包資料夾執行：<\/p><pre class="a-code" id="r95-verify-command">'+esc(cmd)+'<\/pre><p>未執行：只有新編譯產物、無錯誤 log、testbench PASS 同時成立才算通過。<\/p>','複製命令',async()=>{try{await navigator.clipboard.writeText(cmd);h.toast('已複製；請在 Linux 執行並核對結果。');}catch(e){h.toast('無法複製：'+e.message);}});
     });
   }
-  function linuxSteps(){
+  function linuxSteps(fromTransfer=false){
     const p=get(),plan=K.scriptPlan(p);
-    const cmd='python3 run_wiu.py diagnose && python3 run_wiu.py generate';
-    h.openDialog('在 Linux 產生 RTL','<p>解壓工作包，進入其中的資料夾後，複製並執行：<\/p><pre class="a-code" id="r94-linux-command">'+esc(cmd)+'<\/pre><button class="a-primary" data-action="linux-guide-copy">複製執行指令<\/button><p class="r94-status">網站設計檢查完成 → Linux 產生待驗證 → 編譯／模擬待驗證<\/p><p>成功後按下方按鈕取得編譯／模擬指令；請使用當次 runs/&lt;run&gt;/output 內的 filelist。正常與 Empty 請分別使用 <code>normal-asic.f / normal-fpga.f<\/code>、<code>empty-asic.f / empty-fpga.f<\/code>，兩者不可一起編譯。<\/p><button data-action="linux-verify-setup">編譯／模擬命令<\/button><details><summary>進階設定與驗證<\/summary><p>gen_top：<code>'+esc(plan.config.genTop)+'<\/code> · gen_empty：<code>'+esc(plan.config.genEmpty)+'<\/code> · Python：<code>'+esc(plan.config.python)+'<\/code><\/p><button data-action="bundle-script-settings">修改工具路徑<\/button><p>公司工具不隨包附上。VCS 編譯要同時檢查 log 與新產物，模擬要有測試 PASS。詳細記錄保存於工作包產生的 runs 目錄。<\/p><\/details>');
+    const directory=fromTransfer&&transfer?transfer.directory:null,quote=s=>"'"+s.replaceAll("'","'\"'\"'")+"'";
+    const cmd=(directory?'cd '+quote(directory)+' && ':'')+'python3 run_wiu.py diagnose && python3 run_wiu.py generate';
+    h.openDialog('在 Linux 產生 RTL','<p>'+(directory?'接收資料已校驗時，貼上以下命令會進入本次接收資料夾。':'先在 Linux 輸入 bash 並按 Enter，再進入解壓後的工作包資料夾。')+'複製以下命令，貼上後按 Enter。<\/p><pre class="a-code" id="r94-linux-command">'+esc(cmd)+'<\/pre><button class="a-primary" data-action="linux-guide-copy">複製執行指令<\/button><p class="r94-status">網站設計檢查完成 → Linux 產生待驗證 → 編譯／模擬待驗證<\/p><p>成功後按下方按鈕取得編譯／模擬指令；請使用當次 runs/&lt;run&gt;/output 內的 filelist。正常與 Empty 請分別使用 <code>normal-asic.f / normal-fpga.f<\/code>、<code>empty-asic.f / empty-fpga.f<\/code>，兩者不可一起編譯。<\/p><button data-action="linux-verify-setup">編譯／模擬命令<\/button><details><summary>進階設定與驗證<\/summary><p>gen_top：<code>'+esc(plan.config.genTop)+'<\/code> · gen_empty：<code>'+esc(plan.config.genEmpty)+'<\/code> · Python：<code>'+esc(plan.config.python)+'<\/code><\/p><button data-action="bundle-script-settings">修改工具路徑<\/button><p>公司工具不隨包附上。VCS 編譯要同時檢查 log 與新產物，模擬要有測試 PASS。詳細記錄保存於工作包產生的 runs 目錄。<\/p><\/details>');
   }
   function profilesHtml(config){return (config.profiles||[]).map((x,i)=>'<div class="a-card"><b>'+esc(x.name)+'<\/b> · '+x.defineConfig.rows.filter(r=>r.enabled).length+' 個啟用 define <button data-action="bundle-profile-load" data-id="'+i+'">預覽並切換<\/button><button data-action="bundle-profile-remove" data-id="'+i+'">移除快照…<\/button><\/div>').join('');}
   function saveProfile(){h.openDialog('保存目前 Define 組態','<p>保存目前所有 Defines 和 include 引用檔。連線由同一專案重新檢查，不會保存另一份不同步的接線。使用 <code>asic<\/code>、<code>fpga<\/code> 名稱下載時會產生合併的 ASIC／FPGA 分支；合併前會驗證 FPGA 旗標。<\/p><label>組態名稱<input id="f-profile-name" value="asic" spellcheck="false"><\/label>','保存快照',()=>{const p=A.clone(get()),c=B.normalize(p.bundleConfig),name=$('#f-profile-name').value.trim();if(!/^[A-Za-z][A-Za-z0-9_-]*$/.test(name)||name==='current')throw Error('請使用英文字母開頭的名稱；current 保留給目前組態。');const profile={name,defineConfig:D.normalize(p.defineConfig)},i=c.profiles.findIndex(x=>x.name===name);if(i>=0)throw Error('此快照名稱已存在。請先移除舊快照，或使用不同名稱。');c.profiles.push(profile);p.bundleConfig=c;h.commit(()=>h.setProject(p,'bundle'));h.dialog.close();});}
@@ -250,14 +246,7 @@ root.WIUWorkflowPanel=function(h){
   function stubModel(){
     const ui=stubEditing;if(!ui)return null;
     const ties=$$('[data-stub-port]').filter(x=>x.value.trim()).map(x=>({port:x.dataset.stubPort,expr:x.value.trim()}));
-    const config={...ui.config,outputTies:ties},validation=B.validate(ui.project,config),issues=[...validation.errors];
-    // Friendly Verilog literal guidance is a UX check. Do not silently alter RTL.
-    for(const tie of ties){
-      if(/^[\u2019']\s*[01]$/.test(tie.expr)){
-        const width=stubWidth(tie.port,validation),bit=tie.expr.slice(-1);
-        issues.push({port:tie.port,severity:'error',code:'R85_UNBASED',message:tie.port+'：無位寬的 '+tie.expr+' 在目前 parser 不支援。'+(width?'改用 '+width+"'d"+bit+'；全 1 請按「全位元 1」。':'請按該列「全位元 0／1」建立有位寬的常數。')});
-      }
-    }
+    const config={...ui.config,outputTies:ties.concat(ui.retained.filter(x=>!x.removed).map(x=>({port:x.port,expr:x.expr})))},validation=K.emptyValidation(ui.project,config),issues=[...validation.errors];
     return {config,validation,issues};
   }
   function stubWidth(name,result){
@@ -295,10 +284,16 @@ root.WIUWorkflowPanel=function(h){
     }
     for(const el of $$('[data-stub-filter]'))el.setAttribute('aria-pressed',el.dataset.stubFilter===stubFilter?'true':'false');
     const errSummary=$('#r85-stub-errors'),errorPorts=[...new Set(issues.filter(i=>i.port).map(i=>i.port))];
+    const extras=$('#r126-retained-ties');
+    if(extras){
+      const rows=stubEditing.retained.filter(x=>!x.removed);
+      extras.hidden=!rows.length;
+      extras.innerHTML=rows.length?'<h3>需核對的既有設定</h3><p>這些設定失去對應 output 或重複。請移除，或重新指定；確認套用前不會改動專案。</p>'+rows.map(r=>'<div class="a-note" data-retained-row="'+r.index+'"><b>'+esc(r.originalPort)+'</b><code> = '+esc(r.expr)+'</code><label>重新指定 output<select data-stub-remap="'+r.index+'" aria-label="重新指定 '+esc(r.originalPort)+'"><option value="'+esc(r.port)+'">'+esc(r.port)+(stubEditing.ports.some(n=>n.name===r.port)?'':'（已不存在／不是有效 output）')+'</option>'+stubEditing.ports.filter(n=>n.name!==r.port).map(n=>'<option value="'+esc(n.name)+'">'+esc(n.name)+'</option>').join('')+'</select></label><span role="status">'+esc((errorsBy.get(r.port)||[]).join('；')||'重新指定已通過 Empty 檢查，待套用')+'</span><button aria-label="移除 '+esc(r.originalPort)+' 設定" data-action="r126-tie-remove" data-id="'+r.index+'">移除此設定</button></div>').join(''):'';
+    }
     const unidentified=issues.filter(i=>!i.port);
-    errSummary.innerHTML=issues.length?'<strong>'+issues.length+' 個檢查錯誤（'+errorPorts.length+' 個欄位）<\/strong><p>點選問題名稱可跳到該輸入框，不會把錯誤藏到表格底部。<\/p>'+errorPorts.map(name=>'<button class="r85-stub-error-link" data-action="r85-stub-locate" data-id="'+esc(name)+'">'+esc(name)+'：'+esc((errorsBy.get(name)||[])[0])+'<\/button>').join('')+unidentified.map(i=>'<p>'+esc(i.message)+'<\/p>').join(''):'<span>✓ Empty 表達式檢查通過；但尚未在 Linux 生成或模擬。<\/span>';
+    errSummary.innerHTML=issues.length?'<strong>'+issues.length+' 個檢查錯誤（'+errorPorts.length+' 個欄位）<\/strong><p>點選問題名稱可跳到該輸入框，不會把錯誤藏到表格底部。<\/p>'+errorPorts.map(name=>'<button class="r85-stub-error-link" data-action="r85-stub-locate" data-id="'+esc(name)+'">'+esc(name)+'：'+esc((errorsBy.get(name)||[])[0])+'<\/button>').join('')+unidentified.map(i=>'<p>'+esc(i.message)+'<\/p>').join(''):'<span>✓ ASIC／FPGA Empty 表達式檢查通過；但尚未在 Linux 生成或模擬。<\/span>';
     errSummary.classList.toggle('r85-invalid-status',!!issues.length);
-    const count=$('#r85-stub-count');if(count)count.textContent='顯示 '+visible+' / '+stubEditing.ports.length+' 個 output · '+model.config.outputTies.length+' 個明確覆寫 · '+(stubEditing.ports.length-model.config.outputTies.length)+' 個預設 · '+selected.length+' 個勾選';
+    const count=$('#r85-stub-count');if(count)count.textContent='顯示 '+visible+' / '+stubEditing.ports.length+' 個有效 output · '+stubEditing.retained.filter(x=>!x.removed).length+' 筆需核對設定 · '+model.config.outputTies.length+' 個明確覆寫 · '+(stubEditing.ports.length-new Set(model.config.outputTies.filter(t=>stubEditing.ports.some(p=>p.name===t.port)).map(t=>t.port)).size)+' 個預設 · '+selected.length+' 個勾選';
     if(focusFirst&&issues.length){
       const item=issues.find(i=>i.port),input=item&&$$('[data-stub-port]').find(x=>x.dataset.stubPort===item.port);
       if(input){stubFilter='all';$('#r85-stub-search').value='';for(const row of $$('[data-stub-row]'))row.hidden=false;const row=input.closest('[data-stub-row]'),table=$('.r85-stub-table');if(table&&row){table.scrollTop+=row.getBoundingClientRect().top-table.getBoundingClientRect().top-Math.floor(table.clientHeight/3);table.scrollLeft=0;}input.focus({preventScroll:true});input.classList.add('r85-stub-focus');}
@@ -306,27 +301,29 @@ root.WIUWorkflowPanel=function(h){
     }
     return issues;
   }
-  function stubSet(port,kind){
-    const model=stubModel(),width=stubWidth(port,model.validation),el=$$('[data-stub-port]').find(x=>x.dataset.stubPort===port);
+  function stubSet(port,kind,validation=null){
+    const width=stubWidth(port,validation||stubModel().validation),el=$$('[data-stub-port]').find(x=>x.dataset.stubPort===port);
     if(!el)return;
-    el.value=kind==='default'?'':stubLiteral(width,kind);stubRefresh();
+    el.value=kind==='default'?'':stubLiteral(width,kind);if(!validation)stubRefresh();
   }
   function stubEdit(){
     const p=A.clone(get()),config=B.normalize(p.bundleConfig),ports=C.projectView(p).nets.filter(x=>x.direction==='output');
-    if(!ports.length)throw Error('先建立 Top output，才能設定 Empty 輸出。');
-    stubEditing={project:p,config,ports,snapshot:JSON.stringify(get())};stubFilter='all';
+    const seen=new Set(),retained=[];
+    config.outputTies.forEach((tie,index)=>{if(!ports.some(n=>n.name===tie.port)||seen.has(tie.port))retained.push({...tie,index,originalPort:tie.port});seen.add(tie.port);});
+    stubEditing={project:p,config,ports,retained,snapshot:JSON.stringify(get())};stubFilter='all';
     const result=B.validate(p,config),width=n=>stubWidth(n.name,result);
-    h.openDialog('Empty 輸出設定 · '+ports.length+' outputs','<p>留白＝預設全 0；需要全 1 請按「全位元 1」。只會將明確設定的輸出寫到 cfg。<\/p><div class="r85-stub-toolbar"><input id="r85-stub-search" placeholder="搜尋 output 名稱／設定式" aria-label="搜尋 Empty 輸出"><div class="r85-stub-filters" role="group" aria-label="Empty 篩選"><button data-action="r85-stub-filter" data-stub-filter="all" aria-pressed="true">全部<\/button><button data-action="r85-stub-filter" data-stub-filter="custom">只看自訂<\/button><button data-action="r85-stub-filter" data-stub-filter="errors">只看錯誤<\/button><\/div><\/div><div class="r85-stub-batch"><button data-action="r85-stub-select-visible">勾選目前顯示<\/button><button data-action="r85-stub-batch" data-id="zero">選取的全位元 0<\/button><button data-action="r85-stub-batch" data-id="one">選取的全位元 1<\/button><button data-action="r85-stub-batch" data-id="default">選取的恢復預設<\/button><button data-action="r85-stub-unselect">取消勾選<\/button><\/div><p id="r85-stub-count" role="status"><\/p><div id="r85-stub-errors" role="alert" class="r85-stub-errors"><\/div><div class="r85-stub-table"><table class="a-table"><thead><tr><th>選取<\/th><th>Output／位寬<\/th><th>設定式與錯誤位置<\/th><th>快捷操作<\/th><th>預估結果<\/th><\/tr><\/thead><tbody>'+ports.map(n=>'<tr data-stub-row="'+esc(n.name)+'"><td><input type="checkbox" data-stub-select="'+esc(n.name)+'" aria-label="勾選 '+esc(n.name)+'"><\/td><td><b>'+esc(n.name)+'<\/b><small>'+esc(n.range||'1 bit')+' · '+esc(width(n)||'?')+' bit<\/small><\/td><td><input data-stub-port="'+esc(n.name)+'" value="'+esc(config.outputTies.find(x=>x.port===n.name)?.expr||'')+'" aria-label="'+esc(n.name)+' Empty 運算式" placeholder="留白＝預設全 0" spellcheck="false"><small data-stub-example><\/small><small class="r85-field-error" data-stub-error hidden><\/small><\/td><td><div class="r85-stub-quick"><button data-action="r85-stub-quick" data-id="'+esc(n.name)+'" data-kind="zero">全位元 0<\/button><button data-action="r85-stub-quick" data-id="'+esc(n.name)+'" data-kind="one">全位元 1<\/button><button data-action="r85-stub-quick" data-id="'+esc(n.name)+'" data-kind="default">預設<\/button><\/div><\/td><td><small data-stub-actual><\/small><\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>','預覽 Empty／差異',()=>{
+    h.openDialog('Empty 輸出設定 · '+ports.length+' outputs','<p>留白＝預設全 0；需要全 1 請按「全位元 1」。只會將明確設定的輸出寫到 cfg。<\/p><div class="r85-stub-toolbar"><input id="r85-stub-search" placeholder="搜尋 output 名稱／設定式" aria-label="搜尋 Empty 輸出"><div class="r85-stub-filters" role="group" aria-label="Empty 篩選"><button data-action="r85-stub-filter" data-stub-filter="all" aria-pressed="true">全部<\/button><button data-action="r85-stub-filter" data-stub-filter="custom">只看自訂<\/button><button data-action="r85-stub-filter" data-stub-filter="errors">只看錯誤<\/button><\/div><\/div><div class="r85-stub-batch"><button data-action="r85-stub-select-visible">勾選目前顯示<\/button><button data-action="r85-stub-batch" data-id="zero">選取的全位元 0<\/button><button data-action="r85-stub-batch" data-id="one">選取的全位元 1<\/button><button data-action="r85-stub-batch" data-id="default">選取的恢復預設<\/button><button data-action="r85-stub-unselect">取消勾選<\/button><\/div><p id="r85-stub-count" role="status"><\/p><div id="r85-stub-errors" role="alert" class="r85-stub-errors"><\/div><div id="r126-retained-ties"></div><div class="r85-stub-table"><table class="a-table"><thead><tr><th>選取<\/th><th>Output／位寬<\/th><th>設定式與錯誤位置<\/th><th>快捷操作<\/th><th>預估結果<\/th><\/tr><\/thead><tbody>'+ports.map(n=>'<tr data-stub-row="'+esc(n.name)+'"><td><input type="checkbox" data-stub-select="'+esc(n.name)+'" aria-label="勾選 '+esc(n.name)+'"><\/td><td><b>'+esc(n.name)+'<\/b><small>'+esc(n.range||'1 bit')+' · '+esc(width(n)||'?')+' bit<\/small><\/td><td><input data-stub-port="'+esc(n.name)+'" value="'+esc(config.outputTies.find(x=>x.port===n.name)?.expr||'')+'" aria-label="'+esc(n.name)+' Empty 運算式" placeholder="留白＝預設全 0" spellcheck="false"><small data-stub-example><\/small><small class="r85-field-error" data-stub-error hidden><\/small><\/td><td><div class="r85-stub-quick"><button data-action="r85-stub-quick" data-id="'+esc(n.name)+'" data-kind="zero">全位元 0<\/button><button data-action="r85-stub-quick" data-id="'+esc(n.name)+'" data-kind="one">全位元 1<\/button><button data-action="r85-stub-quick" data-id="'+esc(n.name)+'" data-kind="default">預設<\/button><\/div><\/td><td><small data-stub-actual><\/small><\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>','預覽 Empty／差異',()=>{
       if(stubRefresh(true).length)return;
       const model=stubModel(),config=model.config,result=K.stub(p,config),original=new Map(stubEditing.config.outputTies.map(x=>[x.port,x.expr])),next=new Map(config.outputTies.map(x=>[x.port,x.expr]));
-      const changes=ports.map(port=>{const w=stubWidth(port.name,model.validation)||1,before=original.get(port.name)||'',after=next.get(port.name)||'';return {name:port.name,width:w,before,after,actual:stubActual(after,w),changed:before!==after};});
-      h.openDialog('Empty 差異核對 · '+config.outputTies.length+' 個覆寫','<p>套用前核對 '+changes.length+' 個 output：'+changes.filter(x=>x.changed).length+' 個和目前儲存值不同；'+config.outputTies.length+' 個在 cfg 明確覆寫；其餘仍保持預設全 0。<\/p><div class="r85-stub-table"><table class="a-table"><thead><tr><th>Output<\/th><th>位寬<\/th><th>儲存值<\/th><th>將套用的設定式<\/th><th>實際值／靜態判讀<\/th><\/tr><\/thead><tbody>'+changes.map(x=>'<tr class="'+(x.changed?'r85-diff-changed':'')+'"><td><b>'+esc(x.name)+'<\/b><\/td><td>'+x.width+' bit<\/td><td><code>'+esc(x.before||'預設接 0')+'<\/code><\/td><td><code>'+esc(x.after||'預設接 0')+'<\/code><\/td><td>'+esc(x.actual)+'<\/td><\/tr>').join('')+'<\/tbody><\/table><\/div><h3>下載時的 '+esc(p.top)+'.output.cfg（只含明確覆寫）<\/h3><pre class="a-code">'+esc(result.configText||'（空白：全部預設接零）')+'<\/pre><details><summary>查看網站生成的完整 Empty RTL（不是公司執行結果）<\/summary><pre class="a-code">'+esc(result.verilog)+'<\/pre><\/details><p class="a-hint">尚未執行公司 gen_empty、VCS 或自訂值模擬；請在目標環境另外驗收目前設計。<\/p>','確認並套用 Empty',()=>{
+      const changes=[...new Set([...ports.map(p=>p.name),...original.keys(),...next.keys()])].map(name=>{const w=stubWidth(name,model.validation)||1,before=original.get(name)||'',after=next.get(name)||'';return {name,exists:ports.some(p=>p.name===name),width:w,before,after,actual:ports.some(p=>p.name===name)?stubActual(after,w):'已移除失去對應的設定',changed:before!==after};});
+      h.openDialog('Empty 差異核對 · '+config.outputTies.length+' 個覆寫','<p>套用前核對 '+changes.length+' 個 output：'+changes.filter(x=>x.changed).length+' 個和目前儲存值不同；'+config.outputTies.length+' 個在 cfg 明確覆寫；其餘仍保持預設全 0。<\/p><div class="r85-stub-table"><table class="a-table"><thead><tr><th>Output<\/th><th>位寬<\/th><th>儲存值<\/th><th>將套用的設定式<\/th><th>實際值／靜態判讀<\/th><\/tr><\/thead><tbody>'+changes.map(x=>'<tr class="'+(x.changed?'r85-diff-changed':'')+'"><td><b>'+esc(x.name)+'<\/b><\/td><td>'+x.width+' bit<\/td><td><code>'+esc(x.before||'預設接 0')+'<\/code><\/td><td><code>'+esc(x.exists?(x.after||'預設接 0'):'移除此設定')+'<\/code><\/td><td>'+esc(x.actual)+'<\/td><\/tr>').join('')+'<\/tbody><\/table><\/div><h3>下載時的 '+esc(p.top)+'.output.cfg（只含明確覆寫）<\/h3><pre class="a-code">'+esc(result.configText||'（空白：全部預設接零）')+'<\/pre><details><summary>查看網站生成的完整 Empty RTL（不是公司執行結果）<\/summary><pre class="a-code">'+esc(result.verilog)+'<\/pre><\/details><p class="a-hint">尚未執行公司 gen_empty、VCS 或自訂值模擬；請在目標環境另外驗收目前設計。<\/p>','確認並套用 Empty',()=>{
         if(JSON.stringify(get())!==stubEditing.snapshot)throw Error('專案已在另一個畫面變更；請重新編輯。');
         h.commit(()=>{const next=A.clone(get());next.bundleConfig=config;h.setProject(next,'bundle');});stubEditing=null;h.dialog.close();
       });
     });
     stubRefresh();
   }
+  h.dialog.addEventListener('change',e=>{if(e.target.dataset.stubRemap!=null){const tie=stubEditing?.retained.find(r=>r.index===Number(e.target.dataset.stubRemap));if(tie){tie.port=e.target.value;stubRefresh();}}});
   h.dialog.addEventListener('input',e=>{if(e.target.id==='r85-stub-search'||e.target.dataset.stubPort)stubRefresh();});
   function cfgImport(){
     const p=A.clone(get()),snapshot=JSON.stringify(get());
@@ -360,13 +357,14 @@ root.WIUWorkflowPanel=function(h){
     'quick-instance':b=>quickInstance(b?.dataset.id),'flow-instances':b=>instances(b?.dataset.id),'flow-top-interface':topInterface,'flow-module-interface':moduleInterface,'flow-auto':auto,'flow-parameters':parameters,'flow-standard-names':standard,
     'flow-tutorial-stop':()=>h.commit(()=>{const p=A.clone(get());delete p.flow;h.setProject(p,'connections');}),
     'flow-tutorial-step':b=>{if(b.dataset.id==='package'||b.dataset.id==='export'){h.show('bundle');return;}applyPlan('核對範例：'+(F.tutorialTasks(get()).find(x=>x.id===b.dataset.id)?.title||b.dataset.id),F.previewTutorialStep(get(),b.dataset.id));},
-    'linux-transfer':()=>transferStart(),'linux-transfer-command':()=>{if(transfer){transferPhase=0;transferView();}},'linux-transfer-restart':()=>{if(transfer){transferIndex=0;transferLastStart=0;transferPhase=0;transferView();}}, 'linux-transfer-verify':transferVerify, 'linux-transfer-retry':()=>{if(transfer){transferIndex=transferLastStart;transferPhase=1;transferView();}}, 'linux-guide-copy':async()=>{try{await navigator.clipboard.writeText('python3 run_wiu.py diagnose && python3 run_wiu.py generate');h.toast('已複製 Linux 指令；需在 Linux 實際執行。');}catch(e){h.toast('複製失敗：'+e.message);}},'linux-transfer-new':()=>transferStart(true),'linux-transfer-phase':b=>{transferPhase=Number(b.dataset.id);transferView();},'linux-transfer-jump':()=>{const n=Number($('#r69-segment-number').value);if(!Number.isInteger(n)||n<1||n>transfer.chunks.length)throw Error('請輸入 1～'+transfer.chunks.length+' 的段號。');transferIndex=n-1;transferView();},'linux-guide':()=>linuxSteps(0),'linux-verify-setup':verificationSetup,'linux-guide-step':b=>linuxSteps(Number(b.dataset.id)),'linux-transfer-copy':b=>transferCopy(b.dataset.kind),'linux-transfer-next':()=>{transferIndex=Math.min(transfer.chunks.length-1,transferIndex+transferBatchSize);transferView();},'linux-transfer-prev':()=>{transferIndex=Math.max(0,transferIndex-transferBatchSize);transferView();},'linux-transfer-batch-size':b=>{transferBatchSize=Number(b.dataset.id);transferView();},
+    'r126-transfer-continue':transferContinue,'linux-transfer':()=>transferStart(),'linux-transfer-command':()=>{if(transfer){transferPhase=0;transferView();}},'linux-transfer-restart':()=>{if(transfer){transferIndex=0;transferLastStart=0;transferPhase=-1;transferView();}}, 'linux-transfer-verify':transferVerify, 'linux-transfer-retry':()=>{if(transfer){transferIndex=transferLastStart;transferPhase=1;transferView();}}, 'linux-guide-copy':async()=>{try{await navigator.clipboard.writeText($('#r94-linux-command').textContent);h.toast('已複製 Linux 指令；需在 Linux 實際執行。');}catch(e){h.toast('複製失敗：'+e.message);}},'linux-transfer-new':()=>transferStart(true),'linux-transfer-phase':b=>{transferPhase=Number(b.dataset.id);transferView();},'linux-transfer-jump':()=>{const n=Number($('#r69-segment-number').value);if(!Number.isInteger(n)||n<1||n>transfer.chunks.length)throw Error('請輸入 1～'+transfer.chunks.length+' 的段號。');transferIndex=n-1;transferView();},'linux-transfer-guide':()=>linuxSteps(true),'linux-guide':()=>linuxSteps(false),'linux-verify-setup':verificationSetup,'linux-guide-step':()=>linuxSteps(false),'linux-transfer-copy':b=>transferCopy(b.dataset.kind),'linux-transfer-next':()=>{transferIndex=Math.min(transfer.chunks.length-1,transferIndex+transferBatchSize);transferView();},'linux-transfer-prev':()=>{transferIndex=Math.max(0,transferIndex-transferBatchSize);transferView();},'linux-transfer-batch-size':b=>{transferBatchSize=Number(b.dataset.id);transferView();},
     'r119-file-select':b=>showFiles(previewFiles,Number(b.dataset.id),previewApply),'r119-file-prev':()=>showFiles(previewFiles,previewFiles.findIndex(f=>f.path===previewSource.path)-1,previewApply),'r119-file-next':()=>showFiles(previewFiles,previewFiles.findIndex(f=>f.path===previewSource.path)+1,previewApply),'r119-file-download':()=>{h.download(previewSource.path.split('/').pop(),previewSource.text);displayPreviewStatus('已送出下載：'+previewSource.path+'；請在瀏覽器下載列表確認。');},
     'r85-file-copy':copyPreviewFile,'r85-file-verify-copy':copyPreviewVerify,
+    'r126-tie-remove':b=>{const tie=stubEditing.retained.find(r=>r.index===Number(b.dataset.id));if(tie)tie.removed=true;stubRefresh();},
     'r85-stub-filter':b=>{stubFilter=b.dataset.stubFilter;stubRefresh();},
-    'r85-stub-locate':b=>{stubFilter='all';$('#r85-stub-search').value='';stubRefresh();const input=$$('[data-stub-port]').find(x=>x.dataset.stubPort===b.dataset.id);input?.scrollIntoView({block:'center'});input?.focus({preventScroll:true});},
+    'r85-stub-locate':b=>{stubFilter='all';$('#r85-stub-search').value='';stubRefresh();const retained=stubEditing?.retained.find(x=>!x.removed&&x.port===b.dataset.id),input=$$('[data-stub-port]').find(x=>x.dataset.stubPort===b.dataset.id)||$$('[data-stub-remap]').find(x=>Number(x.dataset.stubRemap)===retained?.index);input?.scrollIntoView({block:'center'});input?.focus({preventScroll:true});},
     'r85-stub-quick':b=>stubSet(b.dataset.id,b.dataset.kind),
-    'r85-stub-batch':b=>{const chosen=$$('[data-stub-select]').filter(x=>x.checked);if(!chosen.length)throw Error('先勾選要批次設定的 output。');for(const x of chosen)stubSet(x.dataset.stubSelect,b.dataset.id);stubRefresh();},
+    'r85-stub-batch':b=>{const chosen=$$('[data-stub-select]').filter(x=>x.checked);if(!chosen.length)throw Error('先勾選要批次設定的 output。');const validation=stubModel().validation;for(const x of chosen)stubSet(x.dataset.stubSelect,b.dataset.id,validation);stubRefresh();},
     'r85-stub-select-visible':()=>{$$('[data-stub-row]').filter(x=>!x.hidden).forEach(x=>x.querySelector('[data-stub-select]').checked=true);stubRefresh();},
     'r85-stub-unselect':()=>{$$('[data-stub-select]').forEach(x=>x.checked=false);stubRefresh();},
     'delivery-purpose':b=>{deliveryPurpose=['rtl','linux','empty'].includes(b.dataset.id)?b.dataset.id:'rtl';h.show('bundle');},

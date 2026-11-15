@@ -319,5 +319,35 @@
     project.orgEdited = true;
     return removed;
   }
-  return {clone,normalizeProject,renameNet,pinRows,connectSuggestions,applyConnections,netUsage,removeInstance};
+  // A deletion plan is data only. The caller presents it before one history commit.
+  function planRemoveNets(project, ids) {
+    const wanted=new Set(ids),nets=arr(project.nets).filter(n=>wanted.has(n.id));
+    if(nets.length!==wanted.size)throw Error('接腳已變更，請重新選取。');
+    const names=new Set(nets.map(n=>n.name));
+    const refers=value=>[...identifierSet(value)].some(n=>names.has(n));
+    const connections=arr(project.connections).filter(c=>refers(c.expr));
+    const assigns=arr(project.assigns).filter(a=>refers(a.target)||refers(a.expr));
+    const ties=arr(project.bundleConfig?.outputTies).flatMap((t,index)=>names.has(t.port)||refers(t.expr)?[{...t,index}]:[]);
+    const blockers=[];
+    if(hasOpaqueReferences(project,core()))blockers.push('進階 org 含未解析指令，請先在進階內容處理引用，避免遺漏。');
+    for(const r of arr(project.defineConfig?.rows))if(refers(r.value))blockers.push('Define '+r.name+' 仍引用所選訊號。');
+    for(const n of arr(project.nets))if(!wanted.has(n.id)&&refers(n.range))blockers.push(n.name+' 的位寬仍引用所選訊號。');
+    const parameters=Array.isArray(project.parameters)?project.parameters:Object.entries(project.parameters||{}).map(([name,value])=>({name,value}));
+    for(const p of parameters)if(refers(p.value))blockers.push('Top parameter '+p.name+' 仍引用所選訊號。');
+    return {ids:[...wanted],nets:clone(nets),connections:clone(connections),assigns:clone(assigns),ties:clone(ties),blockers};
+  }
+  function removeNets(project,ids) {
+    const plan=planRemoveNets(project,ids);if(plan.blockers.length)throw Error(plan.blockers.join('\n'));
+    const netIds=new Set(plan.ids),connIds=new Set(plan.connections.map(c=>c.id)),assignIds=new Set(plan.assigns.map(a=>a.id)),tieIds=new Set(plan.ties.map(t=>t.index));
+    project.nets=arr(project.nets).filter(n=>!netIds.has(n.id));
+    // Removed bindings become UNSET, never implicit NC or an invented constant.
+    project.connections=arr(project.connections).filter(c=>!connIds.has(c.id));
+    project.assigns=arr(project.assigns).filter(a=>!assignIds.has(a.id));
+    if(project.bundleConfig)project.bundleConfig.outputTies=arr(project.bundleConfig.outputTies).filter((_,i)=>!tieIds.has(i));
+    const names=new Set(plan.nets.map(n=>n.name)),endpoints=new Set(plan.connections.map(c=>c.instance+'::'+c.port));
+    const stale=key=>String(key).split('|').some(part=>netIds.has(part)||endpoints.has(part)||part.startsWith('top::')&&names.has(part.slice(5)));
+    for(const routes of [project.workbook?.wireRoutes,project.workbook?.graphAutoR99?.routes,project.workbook?.graphAutoR99?.inputManualRoutes])for(const key of Object.keys(routes||{}))if(stale(key))delete routes[key];
+    project.orgEdited=true;return plan;
+  }
+  return {clone,normalizeProject,renameNet,pinRows,connectSuggestions,applyConnections,netUsage,removeInstance,identifierSet,planRemoveNets,removeNets};
 });

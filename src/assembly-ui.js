@@ -511,8 +511,23 @@
     const show=p=>p?esc(p.direction+' '+(p.range||'1 bit')+' '+p.name):'—';
     return '<p>'+x.instances.length+' 顆 instances · '+x.bindings+' 筆受影響綁定。'+(pending?'尚未套用；關閉可取消。':'已同步核對；新接腳保持未設定。')+'</p><table><thead><tr><th>修改前</th><th>修改後</th></tr></thead><tbody>'+x.ports.map(p=>'<tr><td>'+show(p.before)+'</td><td>'+show(p.after)+'</td></tr>').join('')+'</tbody></table><p>'+x.instances.map(i=>esc(i.name)).join('、')+'</p>';
   }
-  function diagramChanged(raw,parsed){
+  function removalBody(plan){
+    const names=plan.nets.map(n=>esc(n.name)).join('、');
+    return '<p>刪除 '+plan.nets.length+' 個宣告：'+names+'</p><p><b>'+plan.connections.length+' 筆接線、'+plan.assigns.length+' 條 assign、'+plan.ties.length+' 筆 Empty 設定</b> 將一起移除。原 instance 接腳改為「未設定」，不會自動改接或當成 NC。整批可一次復原。</p><details><summary>查看受影響項目</summary><ul>'+plan.connections.map(c=>'<li>接線 '+esc(project.instances.find(i=>i.id===c.instance)?.name+'.'+c.port)+' ← '+esc(c.expr)+'</li>').join('')+plan.assigns.map(a=>'<li>assign '+esc(a.target+' = '+a.expr)+'</li>').join('')+plan.ties.map(t=>'<li>Empty '+esc(t.port+' = '+t.expr)+'</li>').join('')+'</ul></details>';
+  }
+  let bulkPending=false;
+  function diagramChanged(raw,parsed,deferred=false){
     if(diagramGuard||currentView!=='diagram')return;
+    if(bulkPending&&!deferred)return {status:'pending',message:'正在處理上一批，請稍候。'};
+    const oldPorts=W.moduleOf(project,activeModule).ports,nextNames=new Set(parsed.ports.map(p=>p.name));
+    const changed=oldPorts.filter(p=>!nextNames.has(p.name)).length+parsed.ports.filter(p=>!oldPorts.some(o=>o.name===p.name)).length;
+    if(changed>=8&&!deferred){
+      bulkPending=true;const before=JSON.stringify(project);refreshSheet();
+      openDialog('處理 '+changed+' 個接腳','<p role="status">正在準備整批修改；完成後統一檢查。可關閉取消。</p><progress aria-label="準備整批修改"></progress>');
+      const marker=$('progress',dialog);
+      setTimeout(()=>{try{if(!marker?.isConnected||!dialog.open)return;if(JSON.stringify(project)!==before)throw Error('專案已變更，請重試。');dialog.close();diagramChanged(raw,parsed,true);}catch(e){toast(e.message);}finally{bulkPending=false;}},32);
+      return {status:'pending',message:'正在處理整批接腳。'};
+    }
     try{
       const id=activeModule,result=W.applyDiagram(project,id,raw,parsed),impact=window.WIUWorkflowR118.interfaceImpact(project,result.project,id),before=JSON.stringify(project);
       if(JSON.stringify(result.project)!==before){
@@ -523,7 +538,10 @@
           else if(result.changes.length)toast(result.changes.join('；'));
           refreshSheet();
         };
-        if(impact.bindings&&impact.ports.some(p=>p.before)){
+        if(result.removal){
+          refreshSheet();openDialog('刪除 Top 接腳與相關設定？',removalBody(result.removal),'刪除並清理相關設定',()=>{apply();dialog.close();});
+          return {status:'pending',message:'請核對整批刪除的影響。'};
+        }else if(impact.bindings&&impact.ports.some(p=>p.before)){
           refreshSheet();
           openDialog('套用共用介面修改？',interfaceImpactBody(impact,true)+'<p>改名會同步更新綁定；刪除接腳會保留原綁定並標記失去端點，需修正。整批可用一次 Undo 復原。</p>','確認套用',()=>{apply();dialog.close();});
           return {status:'pending',message:'尚未套用；請在視窗核對後確認。'};
@@ -698,7 +716,9 @@
       if(!graphNeedsPrepare)window.WIUTopScene.deferConnections(previous,project);
       // Record graph capture in the same action as a source/port edit, so Undo
       // restores routing metadata as well as the renamed RTL and connections.
-      if(!graphNeedsPrepare)project.workbook.graphAutoR99=window.WIUTopScene.capture(project);
+      // Editing a table must not run the hidden Top router. It can take minutes
+      // on a dense design. Preserve saved positions; route when the graph opens.
+      if(!graphNeedsPrepare&&currentView==='assembly'&&tab==='graph')project.workbook.graphAutoR99=window.WIUTopScene.capture(project);
     }catch(e){project=previous;throw e;}
     if(before!==JSON.stringify(project)){
       remember(before,historyOptions||{});stash();
@@ -737,11 +757,18 @@
     for(const el of $$('button',container)){if(!el.disabled)continue;const reason=reasons[el.dataset.action]||el.title||el.getAttribute('title');if(reason){el.setAttribute('title',reason);el.setAttribute('aria-label',el.textContent+'：'+reason);}}
   }
 
-  function openDialog(title,body,actionLabel,action){if(!dialog.open)dialogOpener=document.activeElement;modalAction=action||null;window.WIUAssemblyDialogOpen=true;dialog.innerHTML='<div class="a-dialog-head"><h2>'+esc(title)+'<\/h2><button data-dialog="close" aria-label="關閉視窗">✕<\/button><\/div><div class="a-dialog-content">'+body+'<div id="a-dialog-error" class="a-note a-warn" role="alert" hidden><\/div><\/div><div class="a-dialog-foot"><button data-dialog="close">關閉<\/button>'+(actionLabel?'<button class="a-primary" data-dialog="apply">'+esc(actionLabel)+'<\/button>':'')+'<\/div>';bindInlineDialog();disabledReasons(dialog);if(!dialog.open)dialog.showModal();$('.a-dialog-content',dialog).scrollTop=0;($('input',dialog)||$('textarea',dialog)||$('select',dialog)||$('[data-dialog="apply"]',dialog)||$('[data-dialog="close"]',dialog))?.focus({preventScroll:true});$('.a-dialog-content',dialog).scrollTop=0;}
+  let dialogGeneration=0,dialogBusy=false;
+  function openDialog(title,body,actionLabel,action){dialogGeneration++;dialogBusy=false;if(!dialog.open)dialogOpener=document.activeElement;modalAction=action||null;window.WIUAssemblyDialogOpen=true;dialog.innerHTML='<div class="a-dialog-head"><h2>'+esc(title)+'<\/h2><button data-dialog="close" aria-label="關閉視窗">✕<\/button><\/div><div class="a-dialog-content">'+body+'<div id="a-dialog-error" class="a-note a-warn" role="alert" hidden><\/div><\/div><div class="a-dialog-foot"><button data-dialog="close">關閉<\/button>'+(actionLabel?'<button class="a-primary" data-dialog="apply">'+esc(actionLabel)+'<\/button>':'')+'<\/div>';bindInlineDialog();disabledReasons(dialog);if(!dialog.open)dialog.showModal();$('.a-dialog-content',dialog).scrollTop=0;($('input',dialog)||$('textarea',dialog)||$('select',dialog)||$('[data-dialog="apply"]',dialog)||$('[data-dialog="close"]',dialog))?.focus({preventScroll:true});$('.a-dialog-content',dialog).scrollTop=0;}
   dialog.addEventListener('close',()=>{if(dialog.open)return;window.WIUAssemblyDialogOpen=!!window.WIUManualOpen;if(focusTaskAfterClose){focusTaskAfterClose=false;focusStep();}else if(dialogOpener?.isConnected)dialogOpener.focus({preventScroll:true});});
   function readme(){openDialog('README · 先完成第一個 Top',document.getElementById('a-readme-content').innerHTML);}
   function confirmAction(title,body,actionLabel,fn){openDialog(title,body,actionLabel,()=>{dialog.close();fn();});}
-  function issues(target='all'){try{return C.validate(project,{target});}catch(e){return [{severity:'error',code:'INVALID_MODEL',message:e.message}];}}
+  let issueCacheKey='',issueCache=new Map();
+  function issues(target='all'){
+    const {workbook,...electrical}=project,key=JSON.stringify(electrical);
+    if(key!==issueCacheKey){issueCacheKey=key;issueCache.clear();}
+    if(!issueCache.has(target))try{issueCache.set(target,C.validate(project,{target}));}catch(e){issueCache.set(target,[{severity:'error',code:'INVALID_MODEL',message:e.message}]);}
+    return issueCache.get(target);
+  }
   function badge(text,kind=''){return '<span class="a-badge '+(kind?'a-'+kind:'')+'">'+esc(text)+'<\/span>';}
   const issueHelp={MODULE_FILENAME:'這個 module 的來源檔名不同。請使用 工作包 下載，內含 gen_top 所需的同名副本；README 會說明，編譯只選一份。',MODULE_FILENAME_ALIAS:'完整工具包會建立模組同名檔案別名；若只下載 org，請自行準備這個別名。',UNCONFIGURED_PIN:'這個接腳尚未設定，不能把省略當成空接。請選接線、固定值或刻意不接 NC；留空會在 org 明寫 conn ""。',UNDRIVEN_NET:'這條線有接收端，但沒有完整的訊號來源。檢查 Top input、子模組 output 或 assign。',WIDTH_MISMATCH:'兩端位寬不同。請改正宣告，或明確指定 bus 切片。',MULTIPLE_DRIVERS:'同一段線被多個來源驅動。請檢查 output 是否接在一起。',CONNECTION_EXPRESSION:'連線名稱或運算式無法使用。先確認訊號已宣告，再檢查切片與語法。',MISSING_MODULE:'缺少子模組介面。請匯入對應 RTL。',MISSING_PORT:'原有 pin 已不存在。請核對更新後的子模組介面。',OUTPUT_LVALUE:'子模組的輸出需要接到線，不能接固定值或運算結果。',TOP_NAME:'請在專案 → 修改 Top 名稱填入有效名稱。',NET_NAME:'請修正線名：使用英文字母、數字或底線，且不能以數字開頭。',NET_RANGE:'請確認位寬格式，例如 [7:0]；純量不需要填範圍。',OPEN_INPUT:'這是刻意懸空的輸入。請確認設計允許浮接；通常應接外部訊號或明確閒置值。',UNUSED_DRIVER:'這個來源沒有接收端。請確認是否漏接，或改為刻意不接 NC。',RAW_ACK_REQUIRED:'含有工具尚未理解的進階文字。請到進階 org 核對後，再選候選檔匯出。',IMPORT_ACK_REQUIRED:'匯入檔仍有待確認的內容。請先補齊子模組或處理原始指令。'};
   function resetFilters(){if(graphTableOrigin)delete graphTableOrigin.pinKey;filter='';instanceFilter='';onlyUnbound=false;selected.clear();}
@@ -1034,7 +1061,7 @@
       const parameters=collectParams(),trial=A.clone(project),i={...(existing||{id:'r118-preview',name,module:m.name}),parameters};trial.instances=trial.instances.filter(x=>x.id!==i.id).concat(i);const rows=C.instanceParameterRows(trial,i);
       $('#r83-param-preview',dialog).hidden=!rows.length;$('#r83-param-preview',dialog).innerHTML=rows.map(r=>'<div class="'+(r.error?'r73-error':'')+'"><code>'+esc(r.name)+'</code> <b>'+esc(r.error?'未解析':r.value)+'</b> <span>'+esc(r.sourceLabel)+' · '+esc(r.expression)+(r.error?' · '+esc(r.error):'')+'</span></div>').join('');
       const impact=window.WIUImportReview.parameterImpact(project,i,parameters),width=p=>p?(p.error?'未解析':p.width+' bits'):'不存在';
-      $('#r118-port-width-preview',dialog).innerHTML='<h3>此 instance 接腳位寬預覽</h3><div class="a-tablebox"><table class="a-table"><thead><tr><th>接腳</th><th>宣告</th><th>目前</th><th>套用後</th></tr></thead><tbody>'+impact.rows.map(r=>'<tr'+(r.state==='changed'?' class="r118-width-changed"':'')+'><td>'+esc(r.port)+'</td><td><code>'+esc(r.after?.range||'scalar')+'</code></td><td>'+esc(width(r.before))+'</td><td>'+esc(width(r.after))+(r.after?.error?'<small>'+esc(r.after.error)+'</small>':'')+'</td></tr>').join('')+'</tbody></table></div>'+(impact.errors.length?'<p class="a-note a-warn">套用後此 instance 有 '+impact.errors.length+' 項接線／參數需核對：</p>'+issueList(impact.errors):'<p class="a-hint">此 instance 目前沒有偵測到接線寬度或參數錯誤。</p>');
+      $('#r118-port-width-preview',dialog).innerHTML='<details><summary>接腳位寬與接線影響</summary><div class="a-tablebox"><table class="a-table"><thead><tr><th>接腳</th><th>宣告</th><th>目前</th><th>套用後</th></tr></thead><tbody>'+impact.rows.map(r=>'<tr'+(r.state==='changed'?' class="r118-width-changed"':'')+'><td>'+esc(r.port)+'</td><td><code>'+esc(r.after?.range||'scalar')+'</code></td><td>'+esc(width(r.before))+'</td><td>'+esc(width(r.after))+(r.after?.error?'<small>'+esc(r.after.error)+'</small>':'')+'</td></tr>').join('')+'</tbody></table></div>'+(impact.errors.length?'<p class="a-note a-warn">套用後此 instance 有 '+impact.errors.length+' 項接線／參數需核對：</p>'+issueList(impact.errors):'<p class="a-hint">此 instance 目前沒有偵測到接線寬度或參數錯誤。</p>')+'</details>';
     };$$('[data-param-name]',dialog).forEach(input=>input.addEventListener('input',preview));preview();
   }
   function selectedRows(keys=selected){return A.pinRows(project).filter(r=>keys.has(r.key));}
@@ -1066,8 +1093,20 @@
   function renderSources(){const files=sourceFiles();return E.heading('來源','來源檔案','完整 RTL、include 與目前 Defines。')+'<div class="a-toolbar"><button data-action="import-rtl">＋ 匯入／補齊材料</button><button data-tab="defines">編輯 Defines</button><button data-action="config-profiles">切換具名組態</button></div><div class="a-tablebox"><table class="a-table r119-source-list"><thead><tr><th>路徑</th><th>用途</th><th>使用者／依賴</th><th>大小</th><th></th></tr></thead><tbody>'+files.map((f,n)=>{const users=project.modules.filter(m=>(m.sourceFilename||m.filename)===f.path||(m.includeDependencies||[]).some(x=>(typeof x==='string'?x:x.name||x.path)===f.path));return '<tr><td><code>'+esc(f.path)+'</code>'+(project.workbook.guiEditedSources?.[f.path]?'<small>GUI 已修改介面</small>':'')+'</td><td>'+f.role+'</td><td>'+esc(users.map(m=>m.name).join(', ')||'組態／輔助來源')+'</td><td>'+new TextEncoder().encode(f.text).length+' B</td><td><button data-action="source-preview" data-id="'+n+'">查看／複製</button></td></tr>';}).join('')+'</tbody></table></div>'+issueList(issues().filter(i=>/INCLUDE|PREPROCESS|DEFINE/.test(i.code)));}
   function sourcePreview(index){const files=sourceFiles();flowUI.showFiles(files,Number(index)||0);}
   function pasteConnections(text=''){
-    openDialog('貼上接線表','<p>從試算表複製兩欄：<code>instance.pin</code>、<code>連線</code>。空接請填 <code>NC</code>，清除設定請填 <code>UNSET</code>；空白儲存格不會被當成空接。</p><textarea id="r119-paste-connections" rows="10" spellcheck="false" placeholder="example_inst.req&#9;req">'+esc(text)+'</textarea>','預覽批次接線',()=>{const input=$('#r119-paste-connections',dialog).value,plan=R119.pastedConnections(project,input);if(plan.errors.length)throw Error(plan.errors.join('\n'));if(!plan.changes.length)throw Error('沒有接線列。');changePlan('核對貼上的 '+plan.changes.length+' 筆接線',plan.changes);const back=document.createElement('button');back.textContent='← 返回修改';back.onclick=()=>pasteConnections(input);$('.a-dialog-foot',dialog).prepend(back);});
+    const row=A.pinRows(project).find(r=>r.port.direction==='input')||A.pinRows(project)[0],net=project.nets.find(n=>n.direction==='input')||project.nets[0];
+    const example=row?row.instanceName+'.'+row.port.name+'\t'+(net?.name||"1'b0"):'example_inst.enable\t1\'b1';
+    openDialog('貼上接線表','<p>每行兩欄：<b>instance.pin</b>、<b>連線運算式</b>。從試算表複製會保留 Tab；也接受第一個空白後為完整運算式。NC＝刻意不接，UNSET＝清除設定。</p><button id="r126-copy-example">複製 Tab 範例</button><small>範例需依你的訊號與位寬調整。</small><label>接線表<textarea id="r119-paste-connections" rows="10" spellcheck="false" placeholder="'+esc(example)+'">'+esc(text)+'</textarea></label>','預覽批次接線',()=>reviewPastedConnections($('#r119-paste-connections',dialog).value));
+    $('#r126-copy-example',dialog).onclick=()=>safe(async()=>{await navigator.clipboard.writeText(example);toast('已複製兩欄 Tab 範例。');});
   }
+  function reviewPastedConnections(text){
+    const before=JSON.stringify(project),plan=R119.pastedConnections(project,text);
+    openDialog('核對並修正接線列','<p>來源 → 目的依接腳方向顯示；紅色列可直接修改。</p>'+plan.errors.map(e=>'<p class="a-note a-warn">'+esc(e)+'</p>').join('')+'<div class="a-tablebox"><table class="a-table"><thead><tr><th>行</th><th>instance.pin</th><th>連線</th><th>來源 → 目的／錯誤</th></tr></thead><tbody>'+plan.rows.map((r,i)=>'<tr><td>'+r.line+'</td><td><input data-paste-pin="'+i+'" aria-label="第 '+r.line+' 行接腳" value="'+esc(r.name)+'" aria-invalid="'+!!r.errors.length+'"></td><td><input data-paste-expr="'+i+'" aria-label="第 '+r.line+' 行連線" value="'+esc(r.raw)+'" aria-invalid="'+!!r.errors.length+'"></td><td>'+esc(r.errors.length?r.errors.join('；'):r.source+' → '+r.destination)+'</td></tr>').join('')+'</tbody></table></div>','重新檢查／套用',()=>{
+      if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');const revised=$$('[data-paste-pin]',dialog).map(el=>el.value+'\t'+$('[data-paste-expr="'+el.dataset.pastePin+'"]',dialog).value).join('\n'),review=R119.pastedConnections(project,revised);
+      if(review.errors.length||JSON.stringify(review.changes)!==JSON.stringify(plan.changes)){reviewPastedConnections(revised);return;}
+      if(!review.changes.length)throw Error('沒有可套用的接線。');commit(()=>{A.applyConnections(project,review.changes);project.orgEdited=true;},'已整批套用接線；可一次復原。',{scope:'top',label:'批次接線 '+review.changes.length+' 列'});dialog.close();
+    });
+  }
+
   function candidateForm(key){
     const candidates=R119.netCandidates(project,key),row=A.pinRows(project).find(r=>r.key===key);if(!row)return;
     openDialog('選擇 '+row.instanceName+'.'+row.port.name+' 的 net','<p>'+esc(row.port.direction+' · '+pinRange(row))+'。完整 net 會核對位寬與驅動；需要切片時可使用下方運算式入口。</p><input id="r119-net-search" placeholder="搜尋 net…" aria-label="搜尋相容 net"><div class="a-tablebox"><table class="a-table"><thead><tr><th>net</th><th>方向／位寬</th><th>既有驅動</th><th>相容性</th></tr></thead><tbody>'+candidates.map((n,i)=>'<tr data-r119-net-row="'+esc(n.name.toLowerCase())+'"><td><button type="button" data-r119-net-index="'+i+'" '+(n.errors.length?'disabled':'')+'>'+esc(n.name)+'</button></td><td>'+esc(n.direction+' '+n.range)+'</td><td>'+esc(n.drivers.join(', ')||'尚無來源')+'</td><td>'+esc(n.errors.join('；')||'可連接，套用前核對')+'</td></tr>').join('')+'</tbody></table></div><button data-action="connection-expression" data-id="'+esc(key)+'">輸入切片／拼接／運算式</button>');
@@ -1226,7 +1265,7 @@
     },
     'module-view':b=>{const m=project.modules.find(m=>m.name===b.dataset.id);openDialog('Module / '+m.name,'<div class="a-tablebox"><table class="a-table"><thead><tr><th>PORT<\/th><th>方向<\/th><th>範圍<\/th><\/tr><\/thead><tbody>'+m.ports.map(p=>'<tr><td>'+esc(p.name)+'<\/td><td>'+esc(p.direction)+'<\/td><td>'+esc(p.range||'1 bit')+'<\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>'+issueList(m.issues||[])+'<pre>'+esc(m.source||'示範模型；未附原始 RTL')+'<\/pre>');},
     'net-add':b=>newNetForm(b.dataset.kind),'batch-net':()=>newNetForm('wire',selected),'pin-net':b=>newNetForm('wire',new Set([b.dataset.id])),
-    'net-delete':b=>{const n=project.nets.find(n=>n.id===b.dataset.id);confirmAction('移除 '+n.name,'<p>移除此宣告；使用它的連線不會偷偷改接或清空，會標記為未宣告，請接著修正。<\/p>','移除宣告',()=>commit(()=>{project.nets=project.nets.filter(n=>n.id!==b.dataset.id);project.orgEdited=true;}));},
+    'net-delete':b=>{const plan=A.planRemoveNets(project,[b.dataset.id]),before=JSON.stringify(project);if(plan.blockers.length)throw Error(plan.blockers.join('\n'));confirmAction('刪除宣告與相關設定？',removalBody(plan),'刪除並清理相關設定',()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>A.removeNets(project,plan.ids),undefined,{scope:'top',label:'刪除 '+plan.nets.length+' 個接腳及相關設定'});});},
     'net-inspect':b=>{const n=project.nets.find(n=>n.id===b.dataset.id),rows=A.pinRows(project).filter(r=>r.expr&&new RegExp('(^|[^A-Za-z0-9_$])'+n.name.replace(/[$]/g,'\\$&')+'([^A-Za-z0-9_$]|$)').test(r.expr));openDialog(n.name+' · 連線端點','<p><code>'+esc(n.direction+' '+n.range+' '+n.name)+'<\/code><\/p>'+rows.map(r=>'<div class="a-card"><b>'+esc(r.instanceName+'.'+r.port.name)+'<\/b> '+badge(r.port.direction)+' → <code>'+esc(r.expr)+'<\/code><\/div>').join('')+'<p>Assign：'+esc(project.assigns.filter(a=>(a.target+' '+a.expr).includes(n.name)).map(a=>a.target+' = '+a.expr).join('; ')||'無')+'<\/p>');},
     'batch-expose':expose,'batch-slices':slicePlan,'batch-open':()=>changePlan('預覽刻意不接 NC',selectedRows().map(r=>({instance:r.instance,port:r.port.name,expr:''}))),
     'pin-open':b=>changePlan('預覽刻意不接 NC',selectedRows(new Set([b.dataset.id])).map(r=>({instance:r.instance,port:r.port.name,expr:''}))),
@@ -1470,7 +1509,11 @@
     if(scope==='review'){showGraphCrossingReview();return;}
     if(actions[action])return actions[action](b);
   }
-  dialog.addEventListener('click',e=>safe(()=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.toolTab){go(b.dataset.toolTab);return;}if(b.dataset.toolAction){if(b.dataset.toolScope==='layout')e.stopImmediatePropagation();return runTool(b);}if(b.dataset.dialog==='close')dialog.close();if(b.dataset.dialog==='apply')return modalAction?.();if(b.dataset.dialogFile)pick(b.dataset.dialogFile,b.dataset.moduleTarget||'');if(b.dataset.action&&actions[b.dataset.action])return actions[b.dataset.action](b);}));
+  dialog.addEventListener('click',e=>safe(()=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.toolTab){go(b.dataset.toolTab);return;}if(b.dataset.toolAction){if(b.dataset.toolScope==='layout')e.stopImmediatePropagation();return runTool(b);}if(b.dataset.dialog==='close')dialog.close();if(b.dataset.dialog==='apply'){
+      if(dialogBusy)return;const action=modalAction,generation=dialogGeneration;dialogBusy=true;b.disabled=true;
+      const status=document.createElement('p');status.setAttribute('role','status');status.textContent='處理中，請稍候…';$('.a-dialog-foot',dialog).prepend(status);
+      return new Promise(resolve=>setTimeout(resolve,24)).then(()=>{if(generation===dialogGeneration&&dialog.open)return action?.();}).finally(()=>{if(generation===dialogGeneration){dialogBusy=false;b.disabled=false;status.remove();}});
+    }if(b.dataset.dialogFile)pick(b.dataset.dialogFile,b.dataset.moduleTarget||'');if(b.dataset.action&&actions[b.dataset.action])return actions[b.dataset.action](b);}));
   dialog.addEventListener('input',e=>{if(e.target.id!=='fg-tool-search')return;const query=e.target.value.trim().toLowerCase();let found=0;for(const item of $$('[data-tool-search]',dialog)){item.hidden=!item.dataset.toolSearch.includes(query);if(!item.hidden)found++;}$('#fg-tool-empty',dialog).hidden=found>0;});
   function setPendingField(el){if(el.value===el.defaultValue){clearPendingField(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='與目前設定相同';return;}const label=el.dataset.connection?(A.pinRows(project).find(r=>r.key===el.dataset.connection)?.instanceName+'.'+el.dataset.connection.split('::')[1]):el.dataset.wireName?'線名 '+el.dataset.wireName:el.id==='r124-name'?'模組名稱':'Top 名稱';pendingField={element:el,label};el.dataset.r118Editing='true';el.setAttribute('aria-description','編輯中；Enter 或 Tab 套用，Esc 取消。');const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='編輯中 · Enter／Tab 套用 · Esc 取消';notifySaveState();}
   function clearPendingField(el){delete el.dataset.r118Editing;if(pendingField?.element===el)pendingField=null;notifySaveState();}

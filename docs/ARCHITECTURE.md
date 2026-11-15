@@ -2,7 +2,7 @@
 
 ## Repository boundary
 
-`index.html` is the source shell. Its classic scripts and styles retain their reviewed order. `tools/build.mjs` substitutes these local references without bundling transformations, minification, or dependency resolution. Both Pages and offline HTML are produced by the same function. All 76 extracted runtime source/style files retain the r124.1 content except `release.js` metadata.
+`index.html` is the source shell. Its classic scripts and styles retain their reviewed order. `tools/build.mjs` substitutes these local references without bundling transformations, minification, or dependency resolution. Both Pages and offline HTML are produced by the same function. The r125 extraction baseline remains in tests. r126 changes selected workflow modules explicitly; untouched runtime files retain their baseline hashes.
 
 The directory convention follows WaveASecond. A React/Vite conversion is unnecessary for this structural release. No private baseline directory is needed to build or test this repository.
 
@@ -48,6 +48,16 @@ The directory convention follows WaveASecond. A React/Vite conversion is unneces
 
 ## Release contract
 
-Tests cover public behavior and generic exported-file bytes. The HTML reconstruction test verifies the complete build against the preceding public artifact after normalizing only release metadata. This baseline protects the structural migration; an intentional future feature change must update the affected expected behavior and explain why in release notes.
+Tests cover public behavior and generic exported-file bytes. The build test verifies every current script is embedded exactly once in source order, with no runtime external file dependency. Generic delivery tests retain the original 18-file baseline and allow only the four intentional documentation/version changes. RTL, org, cfg and handoff helper outputs remain byte-compared to r125.
 
 Any future split of the large retained editor or CSS layers should be a separate, verified change. This release makes source reviewable without claiming the legacy implementation is fully modularized.
+
+## r126 workflow boundaries
+
+`assembly-actions.planRemoveNets()` computes the deletion impact without mutation; `removeNets()` rejects opaque references and cleans related bindings, assignments, Empty ties and route caches. `workbook.applyDiagram()` invokes the same plan for Top interface deletions. The UI confirms the complete result and commits one history patch.
+
+`assembly-bundle.validate()` remains the authoritative per-mode Empty validator. `assembly-company.emptyValidation()` merges ASIC/FPGA results for both the editor and work-package export. The editor retains orphan/duplicate ties as editable draft rows and feeds the full draft to this same validator; filtering never discards hidden invalid data.
+
+`connection-review.js` proposes data-only candidates. Selecting a candidate does not modify the project; the combined preview is validated before one commit. Signedness and resolved widths are preserved. No ambiguous candidate or Top promotion is silently selected.
+
+The transfer wizard does not connect to Linux. Copy state is local; pasted receiver output establishes only a user-supplied receipt/hash confirmation. Generation and compilation/simulation remain unverified until separately executed. `startup.js` reveals the shell only after the editor/workspace has initialized.
