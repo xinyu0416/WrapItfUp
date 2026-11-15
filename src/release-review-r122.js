@@ -1,0 +1,1 @@
+globalThis.WIUReleaseReview={html:"<p>WrapItfUp Public r124.1：公開版使用一般示範，不含內部文件或原始工具。保留介面編輯、Top 接線、設計檢查及匯出。</p>"};

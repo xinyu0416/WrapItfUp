@@ -1,0 +1,7 @@
+/* Top Group labels must receive real clicks: a transparent drop rail is not a hit target. */
+.wb-canvas .r82-top-drop{pointer-events:none!important}
+.wb-canvas .r82-top-row{pointer-events:none}
+.wb-canvas .r82-top-row button{pointer-events:auto}
+.r104-top-port-drag .wb-canvas .r82-top-drop{pointer-events:auto!important}
+.wb-canvas [data-graph-group]{cursor:pointer;touch-action:manipulation}
+.wb-canvas [data-graph-group]:focus-visible{outline:2px solid #226b99;outline-offset:2px}

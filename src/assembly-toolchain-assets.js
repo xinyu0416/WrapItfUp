@@ -1,0 +1,1 @@
+(function(r){const a={originals:{},references:{}};r.WIUToolchainAssets=a;if(typeof module!=="undefined")module.exports=a;})(globalThis);

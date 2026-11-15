@@ -1,0 +1,12 @@
+
+/* r99: diagram is a drawing surface, not selectable page text. */
+body.r81-graph .wb-canvas, body.r81-graph .wb-canvas :not(input):not(textarea),
+body.r81-graph .wb-canvas-scroll svg text {
+  -webkit-user-select:none!important;user-select:none!important;
+  -webkit-touch-callout:none;
+}
+body.r81-graph .wb-canvas [data-graph-drag],body.r81-graph .wb-canvas [data-wire-route],body.r81-graph .wb-canvas [data-top-drag] {touch-action:none;-webkit-user-drag:none;}
+body.r81-graph .wb-canvas input:not([readonly]),body.r81-graph .wb-canvas textarea {user-select:text!important;-webkit-user-select:text!important;}
+body.r81-graph .r99-manual-layout {font-weight:700;color:#59607a;}
+body.r81-graph .r99-layout-error {font-weight:750;color:#ae344b;}
+

@@ -1,0 +1,61 @@
+
+/* The accessible title button sits over the schematic's own printed name.
+   Neighboring parameter and open-definition buttons keep their hit areas. */
+.r82-block-hit header button.r107-block-title {
+  inset: 0 58px 0 0;
+  width: auto;
+  height: 100%;
+  padding: 0;
+  opacity: 1;
+  border: 0 !important;
+  background: transparent !important;
+  cursor: grab;
+}
+.r82-block-hit header button.r107-block-title:active { cursor: grabbing; }
+.r82-block-hit header button.r107-block-title[aria-pressed=true] { border-left: 3px solid #16766d !important; }
+.wb-canvas .r82-block-hit header button.r107-block-title:focus-visible { outline: 2px solid #4b73a2 !important; }
+.wb-connect-bar .r86-net-status { flex-wrap: wrap; width: 100%; }
+.wb-connect-bar .r86-net-status .r107-object { white-space: normal; overflow-wrap: anywhere; }
+.wb-connect-bar .r86-net-status .r107-object+button { margin-left: 3px; }
+.wb-connect-bar .r86-net-status button.r107-remove { color: #913e38; }
+.r107-module-scope{display:flex;flex:0 0 auto;align-items:center;flex-wrap:wrap;gap:5px 12px;padding:5px 12px;background:#f4f8f6;color:#28453a;border-bottom:1px solid #cfdbd4;font:13px/1.4 'Segoe UI','Microsoft JhengHei',sans-serif}
+.r107-module-scope[hidden]{display:none}
+.r107-module-scope strong{overflow-wrap:anywhere}
+.r107-module-scope button{padding:4px 8px;background:#fff;border:1px solid #b9c9c1;border-radius:4px;color:#234e41;font:inherit;cursor:pointer}
+.r107-rtl-owned .app :is([data-desk-field="name"],[data-desk-field="bits"],[data-desk-direction],[data-direction-toggle],[data-inspect-field="direction"]){cursor:default}
+/* Pad hit targets follow the painted glyph center, including on Top rails. */
+.wb-canvas.r82-scene .r82-pin-hit.r108-pad-hit {
+  z-index: 6;
+  cursor: crosshair;
+}
+.wb-canvas.r82-scene .r82-pin-hit.r108-pad-hit:hover,
+.wb-canvas.r82-scene .r82-pin-hit.r108-pad-hit:focus-visible {
+  outline: 2px solid #5d427c !important;
+  outline-offset: 1px;
+  background: #80659613 !important;
+}
+.wb-canvas.r82-scene.r89-connect-mode .r108-pad-hit.is-selected {
+  outline: 3px solid #5d427c !important;
+  background: #80659622 !important;
+}
+.wb-canvas.r82-scene.r89-connect-mode .r108-pad-hit.is-compatible {
+  outline: 2px solid #3b8d57 !important;
+  background: #d8f0df88 !important;
+}
+.wb-connect-bar.r82-status { flex-wrap: wrap; }
+.wb-connect-bar .r108-routing-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 0;
+  color: #715a2e;
+  white-space: nowrap;
+}
+.r108-routing-status button { min-height: 26px; padding: 3px 8px; }
+.r104-top-port-drag .wb-canvas .r108-pad-hit { pointer-events: none; }
+.wb-canvas-head.r82-toolbar{overflow:visible;position:relative}
+.r82-toolbar .r69-menu>div>label{padding:5px 9px;justify-content:space-between}
+@media(max-width:820px){
+  .r82-toolbar .r69-menu{position:static}
+  .r82-toolbar .r69-menu>div{top:100%;left:4px;right:4px;min-width:0}
+}

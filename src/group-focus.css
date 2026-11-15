@@ -1,0 +1,6 @@
+
+ .wb-canvas [data-graph-group]{cursor:pointer;pointer-events:all;touch-action:manipulation}
+ .wb-canvas [data-graph-group]:hover{filter:drop-shadow(0px 0px 3px #6e38d2)}
+ .wb-canvas [data-graph-group]:focus-visible{outline:4px solid #2563eb;outline-offset:2px}
+ .wb-canvas .r100-group-chosen{filter:drop-shadow(0px 0px 5px #8b5cf6)}
+ 

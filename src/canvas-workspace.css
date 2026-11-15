@@ -1,0 +1,59 @@
+/* Canvas-first shell; every existing command remains available. */
+:root{--r69-top:48px;--r69-stage:0px;--wb-rail:224px}
+body{--r69-top:48px;--r69-stage:0px;--wb-rail:224px}
+.r69-stagebar{display:none!important}
+.a-switch{height:48px!important;min-height:48px!important;padding:0 12px!important;gap:10px!important;flex-wrap:nowrap!important;z-index:210}
+.a-switch .ux-brand{flex:none;padding:0!important}.a-switch .ux-brand b{font-size:18px}.a-switch .ux-version{font-size:10px}
+.r69-top-field{flex:0 1 210px;min-width:100px}.r69-top-field input{width:100%!important;min-width:80px;font-size:13px}.a-subtitle{font-size:10px!important;flex:none;margin:0!important;color:#42806b}
+.r69-global-tools{display:flex!important;flex:1;min-width:0;gap:5px!important;margin:0!important;white-space:nowrap}
+.r69-global-tools button,.r69-global-tools summary{font-size:12px!important;padding:6px 9px!important;min-height:30px!important;white-space:nowrap}
+.r110-header-space{flex:1}.r110-stages{display:flex;gap:2px;background:#f2f5f5;padding:2px;border-radius:7px}.r110-stages button{border:0!important;background:transparent!important}.r110-stages button[aria-current=page]{background:#fff!important;box-shadow:0 1px 4px #183c3020;color:#08766b!important;font-weight:700}
+body.wb-active .app,body.wb-active .a-shell{top:48px!important;height:calc(100vh - 48px)!important}body.wb-active .wb-rail{top:48px!important}
+.r107-module-scope{display:none!important}
+.app .desk-switchbar,.r82-toolbar{height:44px!important;min-height:44px!important;max-height:44px!important;flex-wrap:nowrap!important;gap:5px!important;padding:5px 10px!important;box-sizing:border-box}
+.app .desk-switchbar>button,.app .desk-switchbar summary,.r82-toolbar>button,.r82-toolbar summary{font-size:12px!important;line-height:18px!important;padding:6px 8px!important;min-height:30px!important;white-space:nowrap}
+.desk-switchbar>.spacer{flex:1}.r69-menu{flex-shrink:0}.r69-menu>div{max-height:min(70vh,540px);overflow:auto}.r69-menu>div button{text-align:left;white-space:normal;min-height:34px!important}
+#r110-module-context>div>strong,#r110-module-context>div>span{display:block;font-size:12px;padding:6px 8px;white-space:normal;color:#607078}
+.r82-status{height:28px!important;min-height:28px!important;max-height:28px!important;box-sizing:border-box;padding:2px 12px!important;display:flex;align-items:center;white-space:nowrap;gap:6px;overflow-x:auto;overflow-y:hidden;flex:none;scrollbar-width:none;font-size:12px}
+.r82-status button{min-height:23px!important;padding:2px 7px!important;font-size:11px!important;white-space:nowrap}
+.r81-canvas-footer{height:28px!important;min-height:28px!important;gap:8px;padding:0 10px!important}.r110-footer-status{flex:1;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.r77-zoom-bar{flex:none;display:flex;white-space:nowrap;gap:3px!important}.r77-zoom-bar button{font-size:11px!important;min-height:23px!important;padding:2px 6px!important}
+.desk-status{height:28px!important;min-height:28px!important;padding:2px 10px!important;display:flex;align-items:center;gap:12px;white-space:nowrap;overflow:hidden}.r110-native-view{margin-left:auto;display:flex;gap:4px;flex:none}.r110-native-view button{min-height:22px!important;font-size:11px!important;padding:2px 6px!important}.desk-status .selected-note{font-size:11px;color:#526d62}
+.app #workspace,.app .integrated-diagram{padding:0!important}.app #canvas{margin:0!important;border-width:0!important}
+.signals-open #signalsPanel{width:390px;min-width:350px;max-width:600px}.desk-table tr{grid-template-columns:22px minmax(100px,1fr) 72px 60px 24px!important;align-items:center!important;gap:4px!important;padding:3px 8px!important;min-height:42px}
+.desk-table td,.desk-table th{grid-column:auto!important;grid-row:auto!important;margin:0!important;padding:0!important}.desk-table th:nth-child(n){display:table-cell!important;grid-column:auto!important}.desk-table thead tr{min-height:28px}.desk-table td:first-child{padding-top:0!important;align-self:center!important}
+.desk-table td input:not([type=checkbox]),.desk-table td select{font-size:12px!important;height:26px!important;padding:2px 4px!important}.desk-row-sub{font-size:10px!important;line-height:12px!important;padding:0 4px!important}.desk-panel-header{gap:6px}.desk-panel-header>div{flex:1}.desk-panel-header button{font-size:11px!important;padding:4px 6px!important}
+.r110-table-wide .signals-open #signalsPanel{width:100%!important;max-width:none!important;flex:1}.r110-table-wide .signals-open #workspace,.r110-table-wide .signals-open #inspectorPanel{display:none!important}.r110-table-wide .desk-table tr{grid-template-columns:28px minmax(260px,1fr) 200px 100px 44px!important}.r110-table-wide .desk-table td input:not([type=checkbox]){font-size:14px!important}.r110-table-wide .desk-row-sub{font-size:11px!important}
+.r69-selection-tools[hidden]{display:block!important}#r110-focus-exit{display:none;position:fixed;top:10px;right:14px;z-index:220;background:#fff;box-shadow:0 2px 10px #203a3422;border:1px solid #b8d7ce;border-radius:6px;padding:7px 12px;color:#176355}
+body.r110-focus.wb-active .a-switch,body.r110-focus .wb-rail,body.r110-focus .desk-switchbar,body.r110-focus .wb-canvas-head,body.r110-focus .wb-connect-bar,body.r110-focus #signalsPanel,body.r110-focus #inspectorPanel,body.r110-focus #r76-groups{display:none!important}
+body.r110-focus.wb-active .a-shell,body.r110-focus.wb-active .app{left:0!important;top:0!important;height:100vh!important}body.r110-focus #r110-focus-exit{display:block}body.r110-focus .rtl-panel{display:none!important}body.r110-focus.r110-table-wide #workspace{display:flex!important}
+button:focus-visible,summary:focus-visible{outline:2px solid #138275!important;outline-offset:2px}
+@media(max-width:1150px){.a-switch{gap:5px!important;padding:0 6px!important}.r69-top-field{max-width:160px}.r69-global-tools{gap:2px!important}.r69-global-tools button,.r69-global-tools summary{padding:5px 6px!important}.a-switch .ux-brand b{font-size:16px}.app .desk-switchbar,.r82-toolbar{gap:3px!important}.app .desk-switchbar>button,.app .desk-switchbar summary,.r82-toolbar>button,.r82-toolbar summary{padding:5px 5px!important;font-size:11px!important}}
+@media(max-width:850px){.a-switch{overflow-x:auto}.r69-global-tools{min-width:max-content}.a-switch .r69-top-field{min-width:140px}.app .desk-switchbar,.r82-toolbar{overflow-x:auto;overflow-y:visible}.wb-rail{box-shadow:8px 0 20px #203a3420;z-index:160}body.r69-with-rail .a-shell,body.r69-with-rail .app{left:0!important}.r110-footer-status{display:none}.r77-zoom-bar{max-width:100%;overflow:auto}.signals-open #signalsPanel{min-width:290px;width:340px}}
+
+.desk-switchbar .r69-menu>div{left:0;right:auto}.desk-status{flex-wrap:nowrap!important}.a-switch .ux-brand b{margin-right:0!important}
+
+/* Selection-first controls: readable hit areas, no horizontally hidden actions. */
+.a-switch .r69-global-tools button,.a-switch .r69-global-tools summary{font-size:13px!important;min-height:34px!important}
+.app .desk-switchbar,.r82-toolbar{height:auto!important;max-height:none!important;min-height:44px!important;flex-wrap:wrap!important;overflow:visible!important}
+.app .desk-switchbar>button,.app .desk-switchbar summary,.r82-toolbar>button,.r82-toolbar summary{font-size:13px!important;min-height:32px!important}
+.r82-status{height:auto!important;max-height:none!important;min-height:32px!important;flex-wrap:wrap!important;overflow:visible!important;white-space:normal!important;padding:4px 12px!important}
+.r82-status button{min-height:30px!important;font-size:12px!important;padding:4px 9px!important}
+#r111-source-notice{flex-basis:100%;font-size:12px;line-height:1.5;color:#804619;background:#fff1d9;border-left:3px solid #a96619;padding:5px 10px}
+#r111-source-notice[hidden]{display:none}
+#r111-find{position:fixed;right:16px;top:104px;width:340px;max-width:calc(100vw - 32px);max-height:calc(100vh - 124px);overflow:auto;z-index:2050;background:#fff;border:1px solid #abcabd;border-radius:10px;box-shadow:0 8px 30px #143b2926;padding:14px;color:#193c32;font:13px/1.5 system-ui}
+#r111-find[hidden]{display:none}#r111-find header{display:flex;gap:5px;align-items:center;margin-bottom:12px}#r111-find header strong{flex:1}#r111-find label{display:block;margin:8px 0}#r111-find input,#r111-find select{display:block;box-sizing:border-box;width:100%;min-height:36px;margin-top:4px;border:1px solid #b5c9bf;border-radius:5px;padding:6px;font:inherit}#r111-find button{cursor:pointer;min-height:32px;border:1px solid #b5c9bf;border-radius:5px;background:#f4f8f5;color:inherit;padding:5px 9px}#r111-find button:disabled{opacity:.45;cursor:default}#r111-find nav{display:flex;gap:6px}#r111-results{max-height:38vh;overflow:auto;margin:10px 0}#r111-results button{display:block;width:100%;text-align:left;margin:5px 0;overflow-wrap:anywhere}#r111-results button>*{display:block}#r111-results [aria-current=true]{border:2px solid #006a4e;background:#dff6eb}#r111-errors{color:#aa271d}#r111-find small{color:#85531d}#r111-find footer p{font-size:12px;color:#53695e}
+.r111-found{outline:2px solid #c58a00!important;outline-offset:2px;background-color:#ffdb4940!important}.r111-current,.signal-card.r74-current{outline:4px solid #007458!important;outline-offset:4px;box-shadow:0 0 0 8px #ffd84b9c!important;background-color:#ffe98455!important}.r111-current[data-wire-net]{filter:drop-shadow(0 0 4px #cf8b00)}.r111-current[data-wire-net] path{stroke-width:5px!important}.signal-card.r74-match{outline:2px solid #bb7900!important;background-color:#ffe98444!important}
+.r77-zoom-bar .r69-menu>div{bottom:100%;top:auto}.wb-block:has([data-graph-drag][aria-pressed=true]){outline:3px solid #078263;outline-offset:4px}.r69-selection-tools[hidden]{display:none!important}
+#r111-object-menu{position:fixed;z-index:2200;width:200px;padding:6px;background:#fff;border:1px solid #a7c6b9;border-radius:8px;box-shadow:0 6px 25px #18382c30}#r111-object-menu[hidden]{display:none}#r111-object-menu button{display:block;width:100%;text-align:left;padding:8px;border:0;border-radius:4px;background:transparent;color:#173d30;font:13px system-ui}#r111-object-menu button:hover,#r111-object-menu button:focus-visible{background:#e0f1e7;outline:2px solid #148466}
+
+/* SVG nets use the path as the highlight; never outline the entire routing bounds. */
+svg .r111-found,svg .r111-current{outline:none!important;box-shadow:none!important;background:none!important}
+svg .r111-current path{stroke:#007458!important;stroke-width:5px!important}
+#r111-find [hidden]{display:none!important}
+
+
+/* r113: the SVG owns the printed name. Its readonly input is only a hit target. */
+.wb-canvas .r82-wire-label[readonly],
+.wb-canvas .r82-wire-label[readonly]:hover,
+.wb-canvas .r82-wire-label[readonly]:focus,
+.wb-canvas.r86-net-focus .r82-wire-label.r86-net-chosen[readonly]{color:transparent!important;-webkit-text-fill-color:transparent!important;background:transparent!important}

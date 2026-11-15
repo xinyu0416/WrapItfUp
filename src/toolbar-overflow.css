@@ -1,0 +1,18 @@
+
+/* v55.2: keep every action reachable when toolbars wrap. */
+.canvas svg{overflow:visible}
+.app{display:flex!important;flex-direction:column!important;height:100dvh!important}
+.topbar{height:auto!important;min-height:56px!important;flex:0 0 auto!important;display:grid!important;grid-template-columns:36px minmax(120px,1fr) auto;gap:7px!important}.topbar>.logo{grid-column:1;grid-row:1}.topbar>.brand{grid-column:2;grid-row:1}.topbar>.tools{grid-column:3;grid-row:1}.topbar>.format-tools{grid-column:1 / -1;grid-row:2;width:100%!important}
+.workspace.integrated-workspace{height:auto!important;flex:1!important;min-height:0!important}
+.format-tools,.tools{flex-wrap:wrap!important}.tools{margin-left:auto!important}
+.diagram-head{height:auto!important;min-height:44px!important;flex:0 0 auto!important;flex-wrap:wrap!important;gap:6px!important;padding:7px 10px!important}
+.workspace-actions{flex-wrap:wrap!important}.workspace-title{flex-wrap:wrap!important}
+.project-name{border:1px solid #b9d5e3;border-radius:6px;padding:4px 8px;background:#edf7fc;color:#174c65;font:600 11px Consolas,monospace;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn:focus-visible,.project-name:focus-visible{outline:2px solid #11688d;outline-offset:2px}
+#toast{max-width:min(760px,94vw);white-space:normal!important;line-height:1.5!important}
+.rtl-import-message{font-size:11px!important}.rtl-import-note{font-size:11px!important}
+.rtl-import-source-pane textarea{tab-size:2}.rtl-import-pane-title{gap:8px}
+#quickHelp{position:fixed;inset:0;z-index:300;background:#182c4266;display:grid;place-items:center;padding:18px}
+#quickHelp[hidden]{display:none}#quickHelp>section{background:white;border:1px solid #ccd8e0;border-radius:14px;padding:24px;width:min(640px,96vw);max-height:90vh;overflow:auto;box-shadow:0 15px 65px #162c4240;font-size:14px;line-height:1.7}
+#quickHelp h2{margin-top:0}#quickHelp dl{display:grid;grid-template-columns:125px 1fr;gap:10px}#quickHelp dt{font-weight:700}#quickHelp dd{margin:0}
+@media(max-width:1100px){.workspace-hint{display:none!important}.hide-small{display:inline-flex!important}.secondary-tool{display:inline-flex!important}.brand{margin-right:auto!important}.topbar .format-tools{order:3;width:100%!important}.rtl-sub{display:none!important}}

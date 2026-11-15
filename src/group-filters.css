@@ -1,0 +1,13 @@
+
+/* r100: Group titles/selectors are quick filters, not drag handles or edits. */
+body.r81-graph .wb-canvas svg [data-graph-group] {cursor:pointer;pointer-events:visiblePainted}
+body.r81-graph .wb-canvas svg [data-graph-group]:hover,
+body.r81-graph .wb-canvas svg [data-graph-group].r100-group-chosen {text-decoration:underline;text-decoration-thickness:1.4px}
+body.r81-graph .wb-canvas svg [data-graph-group]:focus-visible{outline:2px solid #187eaa;outline-offset:2px}
+body.r81-graph .r100-group-row{padding:5px 0;border-bottom:1px solid #e6e9ee}
+body.r81-graph .r100-group-select{font-size:10px;margin:0 0 5px 0;padding:5px 8px;border-radius:6px;border:1px solid #a4b8cc;background:#eff5fa;color:#254964;cursor:pointer}
+body.r81-graph .r100-group-select.r100-group-chosen{background:#216a91;color:white;border-color:#216a91}
+
+body.r81-graph .r100-group-picker{display:inline-flex;align-items:center;gap:5px;font-size:10px;white-space:nowrap}
+body.r81-graph .r100-group-picker select{max-width:190px;height:29px;border:1px solid #cbd6e0;border-radius:5px;background:white;font-size:10px}
+
