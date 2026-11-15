@@ -1,0 +1,382 @@
+{
+  "origin": "WrapItfUp Public r124.1",
+  "htmlSha256": "13fb0e9623830a04e600f0ca15579c03b17cd00030d27e10f42b9d49e833023e",
+  "files": [
+    {
+      "path": "src/signal-table-model-r120.js",
+      "kind": "script",
+      "sha256": "c60ff72e9b3c4559e6493d04547ff77feee626cc69f1a6b285927af1c83f9ad6"
+    },
+    {
+      "path": "src/diagram-scene.js",
+      "kind": "script",
+      "sha256": "837bf81c1f31807253daf61df6cfa3937a0066a26fbb471142424610021ea2c6"
+    },
+    {
+      "path": "src/shortcut-routing.js",
+      "kind": "script",
+      "sha256": "08444c389e74ff5080bf68589bcf04f28aef3faafa69b2436e3b44f1f77e5c4d"
+    },
+    {
+      "path": "src/editor.js",
+      "kind": "script",
+      "sha256": "27197e7d7469a65db3b5065c71d827a105e49e290a3043a319fb224cec2e403a"
+    },
+    {
+      "path": "src/delivery-assets.js",
+      "kind": "script",
+      "sha256": "b32c3e11c7da9786b26a5a997bc4d7d25a67fed490551823184425041e5f8f49"
+    },
+    {
+      "path": "src/delivery-transfer.js",
+      "kind": "script",
+      "sha256": "4fac6f53ab5f9ec07b8baa47248f0bd7dd913b0c1a16de3e0b4af2a1c8990f54"
+    },
+    {
+      "path": "src/assembly-toolchain-assets.js",
+      "kind": "script",
+      "sha256": "3d3321e52a4e6211218646b2c9d325e7717bb3dfeb4eb659cc9305ef2319fd85"
+    },
+    {
+      "path": "src/assembly-defines.js",
+      "kind": "script",
+      "sha256": "0cf68e4bb8d19de6729e9cf8095b9549ceea0df2db16f9d6d84d71c8deb6cb78"
+    },
+    {
+      "path": "src/assembly-core.js",
+      "kind": "script",
+      "sha256": "c314f0860c9760c8870aa0f00cc74c22e98eb878ca846cc20ca29a0cb0948400"
+    },
+    {
+      "path": "src/assembly-parser.js",
+      "kind": "script",
+      "sha256": "908b42a442233ca067c02bb323a4c108a1f570ad0e37c863f3345e39256a5ef3"
+    },
+    {
+      "path": "src/assembly-actions.js",
+      "kind": "script",
+      "sha256": "59724e3d74691c0876e1613eeea49402a0268936d93d86a50d85a31b486249a3"
+    },
+    {
+      "path": "src/assembly-learning.js",
+      "kind": "script",
+      "sha256": "ad603b57766239d2a50f18ec8b5abe1b15406e94f67f7990424207a81d49d2e9"
+    },
+    {
+      "path": "src/assembly-flow.js",
+      "kind": "script",
+      "sha256": "2ec75a9219f441612e060e319b2295ed471c76bcea647a3e88fa94e796f4e7fb"
+    },
+    {
+      "path": "src/assembly-bundle.js",
+      "kind": "script",
+      "sha256": "672951ff6487d11bda7b8498d4d9053b38cadfe2142b54dfd78ef18e4b51bdf2"
+    },
+    {
+      "path": "src/assembly-company.js",
+      "kind": "script",
+      "sha256": "73e891666abfa7f63bcdc6924da1d2903b1352c97be14f8cc5a26e4e12b25eed"
+    },
+    {
+      "path": "src/assembly-defines-ui.js",
+      "kind": "script",
+      "sha256": "168324d099d584e1e1c5490228072184974e2126c2c52388d03881e96a95d610"
+    },
+    {
+      "path": "src/assembly-workflow-ui.js",
+      "kind": "script",
+      "sha256": "ff562395475cadae7b99ed796eec0399d56ff2132c24984830e7feae9d280d6c"
+    },
+    {
+      "path": "src/assembly-experience.js",
+      "kind": "script",
+      "sha256": "06129df8a4f796a5bac62aad3e11ceae926a286e84bcba5e74003d46d55b45a5"
+    },
+    {
+      "path": "src/assembly-lesson.js",
+      "kind": "script",
+      "sha256": "312a86446cdbcb69cfb0feab534115dbe743246a39e854b4d29e932ce1cf24ba"
+    },
+    {
+      "path": "src/assembly-focus-guide.js",
+      "kind": "script",
+      "sha256": "9453f36da9b7f83d8e5b0d0d9ebf70523c4c768c642e29ed9b3201c41898bd31"
+    },
+    {
+      "path": "src/diagram-style.js",
+      "kind": "script",
+      "sha256": "d27bd9595d87a7b6b6986f2b91aa4d6c8afa4e3b27ae5567b31bc195e0179c07"
+    },
+    {
+      "path": "src/routing-spacing-r98.js",
+      "kind": "script",
+      "sha256": "813485c06e0d32d03fd5723c7493ef6324a67a66ee821f16a0ea9974776c4432"
+    },
+    {
+      "path": "src/routing-quality-r98.js",
+      "kind": "script",
+      "sha256": "d7785ca6c8c59b3cc3e7d14cd7f9cd7868eb06572427309bf06adb8e6fc71df4"
+    },
+    {
+      "path": "src/top-autosize-r98.js",
+      "kind": "script",
+      "sha256": "16efece9708363b59010cce81e5ece546e06d9d2f7667a4fa530705c97d3b781"
+    },
+    {
+      "path": "src/native-routing-r92.js",
+      "kind": "script",
+      "sha256": "b5e94b6d66a1b26e344d5a89cb8029f086d396869ace62741b314bf8321b6917"
+    },
+    {
+      "path": "src/native-polyline-r98.js",
+      "kind": "script",
+      "sha256": "a664af3787681b4085ac93793b7ef8682154ba03656d30a91e7a42d9a0cf25a6"
+    },
+    {
+      "path": "src/native-visio-r92.js",
+      "kind": "script",
+      "sha256": "b280014f55402c8721c75c5b9a8ea0d063fc6c217f7b79dda8ac7b81d713f60b"
+    },
+    {
+      "path": "src/shared-jump-plan-r104.js",
+      "kind": "script",
+      "sha256": "7d03ab00a090b50d1097ff309b49331db55052725ea5d6c28cc845bc62ad392d"
+    },
+    {
+      "path": "src/visio-live-geometry-r105.js",
+      "kind": "script",
+      "sha256": "7858422b0dedd92c69e3622c5bbd448c3b7385584eac493d014ded7f883e9dcc"
+    },
+    {
+      "path": "src/native-visio-polyline-r98.js",
+      "kind": "script",
+      "sha256": "2030d3e675077e1f09bd3bb0dc6a33c603733864375a88dad2fb811945ed2f4b"
+    },
+    {
+      "path": "src/history.js",
+      "kind": "script",
+      "sha256": "5be2c1d78cfaec023d984093935d42ff51f9c62305f9dfcf5b7091f0b2cb8c90"
+    },
+    {
+      "path": "src/rtl-interface-edit.js",
+      "kind": "script",
+      "sha256": "5f5c67d9d831cac3cebcbc1a6b5a893991baa726b74e803212c57fffb1dd563d"
+    },
+    {
+      "path": "src/workbook.js",
+      "kind": "script",
+      "sha256": "551f4a4d92fe674f546dc7fd45c2159333a1125053c5edfb84893cd7466a9fdc"
+    },
+    {
+      "path": "src/graph-layout.js",
+      "kind": "script",
+      "sha256": "08fa172d5b9df937eff7c4277e3281b7a2bbd56a16c27c79591514be7de5604d"
+    },
+    {
+      "path": "src/graph-wiring.js",
+      "kind": "script",
+      "sha256": "63f1b4a2a9193e661e8e4dec065e07a77d4ed4e3fb8de2e54b20e03e42b573fc"
+    },
+    {
+      "path": "src/wire-geometry.js",
+      "kind": "script",
+      "sha256": "e821c7bc5c610f4e656644fd2be7c21ee5ff1e74966ccdc134b293d061c05add"
+    },
+    {
+      "path": "src/graph-electrical-audit.js",
+      "kind": "script",
+      "sha256": "002ee679c4726dd5d3a43da06931c18c3ed47ca147cdef73e56b8801458dbe28"
+    },
+    {
+      "path": "src/corner-untangle-r100.js",
+      "kind": "script",
+      "sha256": "98ceb56fd3128e32ac599fd0765ba03e30410867f6cdc124171ff4d877037e20"
+    },
+    {
+      "path": "src/track-space-r106.js",
+      "kind": "script",
+      "sha256": "59e8b8575a0ddd2989304baa1245f6409574e425ae05d9071588ed04b0ff179c"
+    },
+    {
+      "path": "src/graph-scene.js",
+      "kind": "script",
+      "sha256": "688eddad2a3b42163a204fed2f90192ef9348f7fbe1ca57dd54e81da88c30abd"
+    },
+    {
+      "path": "src/group-focus-r100.js",
+      "kind": "script",
+      "sha256": "12639756c57523a8ff332d676cd3b1db13434f50078a37ce797685f77c967653"
+    },
+    {
+      "path": "src/workbook-view.js",
+      "kind": "script",
+      "sha256": "2ea224b691ffbf3d760155dd35a0d9daf9ce69982977560c72dbb7e48b4d2a36"
+    },
+    {
+      "path": "src/port-widths.js",
+      "kind": "script",
+      "sha256": "ce1766787327b3c8bd96e8e12e4812e13ee1ea701ebba71e4f99d74e626b3154"
+    },
+    {
+      "path": "src/canvas-editing.js",
+      "kind": "script",
+      "sha256": "566665d1f30cc5614f526fdbeecce724ab7ad5db3a836d943b8a493a3c0dbbe2"
+    },
+    {
+      "path": "src/find-replace.js",
+      "kind": "script",
+      "sha256": "783dd31fae8e73364061aa4d5335aed0fb2139d1780d225a7e5fc2ac81af56fc"
+    },
+    {
+      "path": "src/text-editing.js",
+      "kind": "script",
+      "sha256": "6e670fe6343dc2a8d7d67c7ad5dfeb3aad8d1262a618731a43b94e6a644c6415"
+    },
+    {
+      "path": "src/graph-edit-r111.js",
+      "kind": "script",
+      "sha256": "cc18030416c94114e858693243b27ed0fec21e6b61c3b5773fc20ed750eea043"
+    },
+    {
+      "path": "src/workflow-r118.js",
+      "kind": "script",
+      "sha256": "23f4d93badfde1defb2ab731a06732f356829066792b1960691e29f6e8d21d1f"
+    },
+    {
+      "path": "src/import-review-r118.js",
+      "kind": "script",
+      "sha256": "8c6eff1a9e8d7d16bb96a104ef2cd1699d8b131d4828a68eeacac8dac49dc4a3"
+    },
+    {
+      "path": "src/history-flow-r118.js",
+      "kind": "script",
+      "sha256": "1b3bb6d45292602d8590c65b486c47a1f527ce91d5df66548b9c6888371dabf5"
+    },
+    {
+      "path": "src/workflow-r119.js",
+      "kind": "script",
+      "sha256": "fc213e259e5ee9e38b8c47e17856c5367050ff21fdca7323c4d096f0e5887e2e"
+    },
+    {
+      "path": "src/interaction-r124.js",
+      "kind": "script",
+      "sha256": "44fea53a1b32f593c592da63015952b5a6f510ed1c708e674e4cc248fa9f8a67"
+    },
+    {
+      "path": "src/workspace-r119.js",
+      "kind": "script",
+      "sha256": "8ed59e3d00c671980394ff5479aed85f96954aadfb928ad00134862e2d90dbf6"
+    },
+    {
+      "path": "src/release-review-r122.js",
+      "kind": "script",
+      "sha256": "4fe38b1cdbf57280e6962d8a62350593751e80b8dbfb06a6153eee69f8e0aa16"
+    },
+    {
+      "path": "src/assembly-ui.js",
+      "kind": "script",
+      "sha256": "6e11b13bc5106212a7decbb6ec92dd9f6b0586928f8cd5b870f00c9e81052b3b"
+    },
+    {
+      "path": "src/workspace-layout.js",
+      "kind": "script",
+      "sha256": "d8ce5151bdefcabd7ff4b9cb69231e1a63a6c5bdb448c432660d71b88c230cf3"
+    },
+    {
+      "path": "src/workspace-r116.js",
+      "kind": "script",
+      "sha256": "98583f10112b0d3fc206e626bc4367d73c2dd93a1b087e34413971f6cbc4d330"
+    },
+    {
+      "path": "src/editor.css",
+      "kind": "style",
+      "sha256": "baccc21ae375f1d58680508e46ada024909afc4615b4240476bae10d3e52a90e"
+    },
+    {
+      "path": "src/toolbar-overflow.css",
+      "kind": "style",
+      "sha256": "9cbff1859449c85df3d95403f9bf4f4b2bb4d7d8308ae570d6e22a64b36a7ae2"
+    },
+    {
+      "path": "src/workspace-shell.css",
+      "kind": "style",
+      "sha256": "94e50ce336351f26ea11b4d5579fc805f54bc64ab3ae94b907615ae35292f0f4"
+    },
+    {
+      "path": "src/port-layout.css",
+      "kind": "style",
+      "sha256": "3d2d4b29b1f328964f415fb5b7b7066ca818ec3106a3f099562f1b1974d429bc"
+    },
+    {
+      "path": "src/visio-download.css",
+      "kind": "style",
+      "sha256": "628622294d687d432a33bc57ac824c3784e28cb4c7990010a5484ba6b45af265"
+    },
+    {
+      "path": "src/assembly-workspace.css",
+      "kind": "style",
+      "sha256": "c63403330221e88e346f83c8efcd8dfab843926be451ada8d924d86a53bb3676"
+    },
+    {
+      "path": "src/graph-interaction.css",
+      "kind": "style",
+      "sha256": "2d6c64c8e882517da2b4918fc2ccbec53df81b42bfa9ad54d0e3170f651c7b56"
+    },
+    {
+      "path": "src/group-filters.css",
+      "kind": "style",
+      "sha256": "b42deb4f9eb163e0148581d419403cd40b8dafc8a31aede0a4062c88f1581067"
+    },
+    {
+      "path": "src/rtl-fold.css",
+      "kind": "style",
+      "sha256": "90f229519898e9e9001b830db350378656871f6f6b4407feb1e939c4f453dd93"
+    },
+    {
+      "path": "src/group-focus.css",
+      "kind": "style",
+      "sha256": "61f4edc72365e2d12f53ebd42a07c41cc08029ca746f4f013e98670fa1a69660"
+    },
+    {
+      "path": "src/graph-hit-targets.css",
+      "kind": "style",
+      "sha256": "dac7270baf58db43c945100259e2ba35f6e65c474d6ad9ae6aa8de94f06b3517"
+    },
+    {
+      "path": "src/inline-names.css",
+      "kind": "style",
+      "sha256": "82ee6a8cd6c4867991952b796c4e7ddd69459c88852f8088068c8c821e9449dd"
+    },
+    {
+      "path": "src/canvas-workspace.css",
+      "kind": "style",
+      "sha256": "98310eef7925df52272a7d86dee05ca644e02102419161c215bf09b68daa57b9"
+    },
+    {
+      "path": "src/workspace-controls.css",
+      "kind": "style",
+      "sha256": "80857b979aab62418bc548085aea9eca9e46fbb8d739cf15612f91c1b3e18206"
+    },
+    {
+      "path": "src/connection-history.css",
+      "kind": "style",
+      "sha256": "5e6f0d4a2f7525dea70434b076cc3aec2b521e831ce802c28c5fb2b4a413a3d5"
+    },
+    {
+      "path": "src/project-shell.css",
+      "kind": "style",
+      "sha256": "df50e14d33a5b259778bdf00159b3e35920a571427400797aef906cac34af34f"
+    },
+    {
+      "path": "src/overlay-layers.css",
+      "kind": "style",
+      "sha256": "8ea5fd679a9312787ed5329e3a7ef22f0fe1eb50b5b58b4be39317da0a23af66"
+    },
+    {
+      "path": "src/signal-table.css",
+      "kind": "style",
+      "sha256": "9793d43fcfcea35ef9d26e01363c519ced7c8232c615c85226eed755ae9a2c74"
+    }
+  ],
+  "releaseSource": "(function(root){const release={number:124,label:'Public r124.1'};root.WIURelease=release;if(typeof module==='object')module.exports=release;})(globalThis);\n"
+}

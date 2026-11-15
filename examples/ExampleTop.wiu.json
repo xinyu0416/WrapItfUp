@@ -1,0 +1,233 @@
+{
+  "format": "WrapItfUp",
+  "schemaVersion": 1,
+  "appVersion": "125",
+  "scope": "project",
+  "origin": "user",
+  "project": {
+    "schema": 1,
+    "top": "example_top",
+    "modules": [
+      {
+        "name": "learn_source",
+        "ports": [
+          {
+            "name": "clk",
+            "direction": "input",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_zo3znr85zu"
+          },
+          {
+            "name": "enable",
+            "direction": "input",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_6kk0oljbu5"
+          },
+          {
+            "name": "data",
+            "direction": "output",
+            "range": "[7:0]",
+            "signed": false,
+            "comment": "",
+            "id": "w_9tk8j2dypv"
+          },
+          {
+            "name": "debug",
+            "direction": "output",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_my6u0s38or"
+          }
+        ],
+        "parameters": [],
+        "source": "module learn_source (\n  input clk,\n  input enable,\n  output [7:0] data,\n  output debug\n);\n  assign data = enable ? 8'hA5 : 8'h00;\n  assign debug = enable;\nendmodule",
+        "issues": [],
+        "filename": "learn_source.v",
+        "id": "w_batunnz977"
+      },
+      {
+        "name": "learn_sink",
+        "ports": [
+          {
+            "name": "clk",
+            "direction": "input",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_38uza3hham"
+          },
+          {
+            "name": "data",
+            "direction": "input",
+            "range": "[7:0]",
+            "signed": false,
+            "comment": "",
+            "id": "w_yxik5tv13m"
+          },
+          {
+            "name": "done",
+            "direction": "output",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_e5brlugsue"
+          }
+        ],
+        "parameters": [],
+        "source": "module learn_sink (\n  input clk,\n  input [7:0] data,\n  output done\n);\n  assign done = |data;\nendmodule",
+        "issues": [],
+        "filename": "learn_sink.v",
+        "id": "w_zcc518wvzl"
+      }
+    ],
+    "instances": [
+      {
+        "id": "guide_instance_1",
+        "name": "learn_source_inst",
+        "module": "learn_source",
+        "parameters": {},
+        "nameBinding": {
+          "mode": "module",
+          "suffix": "",
+          "lastGenerated": "learn_source_inst"
+        }
+      },
+      {
+        "id": "guide_instance_2",
+        "name": "learn_sink_inst",
+        "module": "learn_sink",
+        "parameters": {},
+        "nameBinding": {
+          "mode": "module",
+          "suffix": "",
+          "lastGenerated": "learn_sink_inst"
+        }
+      }
+    ],
+    "nets": [
+      {
+        "id": "guide_net_clock",
+        "name": "clk",
+        "direction": "input",
+        "range": "",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "guide_net_data",
+        "name": "data_link",
+        "direction": "wire",
+        "range": "[7:0]",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "guide_net_done",
+        "name": "done",
+        "direction": "output",
+        "range": "",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      }
+    ],
+    "connections": [
+      {
+        "id": "c_1",
+        "instance": "guide_instance_1",
+        "port": "clk",
+        "expr": "clk"
+      },
+      {
+        "id": "c_2",
+        "instance": "guide_instance_2",
+        "port": "clk",
+        "expr": "clk"
+      },
+      {
+        "id": "c_3",
+        "instance": "guide_instance_1",
+        "port": "data",
+        "expr": "data_link"
+      },
+      {
+        "id": "c_4",
+        "instance": "guide_instance_2",
+        "port": "data",
+        "expr": "data_link"
+      },
+      {
+        "id": "c_5",
+        "instance": "guide_instance_1",
+        "port": "enable",
+        "expr": "1'b1"
+      },
+      {
+        "id": "c_6",
+        "instance": "guide_instance_2",
+        "port": "done",
+        "expr": "done"
+      },
+      {
+        "id": "c_7",
+        "instance": "guide_instance_1",
+        "port": "debug",
+        "expr": ""
+      }
+    ],
+    "assigns": [],
+    "formats": [
+      "disable_unconstraint_port",
+      "case_sensitive",
+      "constraint_port_order",
+      "keep_inst_port_order"
+    ],
+    "advanced": "",
+    "prelude": "",
+    "defineConfig": {
+      "fileName": "wiu_defines.vh",
+      "rows": [],
+      "includes": []
+    },
+    "rtlSources": [
+      {
+        "name": "learn_source.v",
+        "text": "// WIU learning fixture: fixed sample data, enabled by a one-bit input.\n// clk is an interface example; this combinational fixture does not use it.\nmodule learn_source (\n  input clk,\n  input enable,\n  output [7:0] data,\n  output debug\n);\n  assign data = enable ? 8'hA5 : 8'h00;\n  assign debug = enable;\nendmodule\n"
+      },
+      {
+        "name": "learn_sink.v",
+        "text": "// WIU learning fixture: report whether any input data bit is high.\n// clk is an interface example; this combinational fixture does not use it.\nmodule learn_sink (\n  input clk,\n  input [7:0] data,\n  output done\n);\n  assign done = |data;\nendmodule\n"
+      }
+    ],
+    "workbook": {
+      "schema": 1,
+      "projectId": "w_75vnoojj91",
+      "diagrams": {},
+      "recovered": [],
+      "example": "public-example",
+      "graphPositions": {
+        "guide_instance_1": {
+          "x": 360,
+          "y": 140
+        },
+        "guide_instance_2": {
+          "x": 360,
+          "y": 380
+        }
+      }
+    }
+  },
+  "workspace": {},
+  "savedAt": "2026-11-15T19:12:22.867Z",
+  "integrity": {
+    "algorithm": "crc32",
+    "value": "4442cd2f"
+  }
+}

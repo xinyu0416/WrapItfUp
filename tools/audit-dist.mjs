@@ -1,0 +1,13 @@
+import {readFile, readdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const root=fileURLToPath(new URL('..',import.meta.url));
+const html=await readFile(path.join(root,'dist/index.html'),'utf8');
+const forbidden=[/gt-reference-data/,/gt-page-\d+/,/TEMPLATE_B64/,/(?:Function|Sub)\s+EmbeddedStencilBase64/i,/original_sha256/,/company_review/,/Confidential/i,/Realtek Corp/i,/\/project\//,/tcsh_crosscheck/,/2026-10-16/,/Joan\s*Tseng/i];
+for(const pattern of forbidden) if(pattern.test(html)) throw Error('Public artifact contains prohibited reference: '+pattern);
+if(/<(?:script|link)\b[^>]*(?:src|href)\s*=\s*["'][^"']+["']/i.test(html)) throw Error('Offline artifact has external script/style references');
+if(/\b(?:fetch|XMLHttpRequest|sendBeacon)\s*\(/.test(html)) throw Error('Review new network access before publication');
+const shim=await readFile(path.join(root,'src/assembly-toolchain-assets.js'),'utf8');
+if(!/originals:\s*\{\}/.test(shim)||! /references:\s*\{\}/.test(shim)) throw Error('External tool assets must remain empty');
+for(const entry of await readdir(path.join(root,'src'))) if(!/\.(?:js|css|md)$/.test(entry)) throw Error('Unexpected source asset: '+entry);
+console.log('PASS: self-contained HTML, empty external-tool assets, no private manual or embedded stencil, no application upload client.');

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+preview/
+*.log
+.DS_Store
+__pycache__/
+.env
+.env.*
+.local-config/
