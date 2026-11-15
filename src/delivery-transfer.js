@@ -53,5 +53,10 @@
     if(('python3 -u -c '+quote(bootstrap)).split('\n').some(line=>encode(line+'\n').length>3000))throw Error('Bootstrap line too long');
     return {id,target,encoding,transferBytes:transferBytes.length,originalBytes:payload.length,files:rows.map(({path,bytes,sha256})=>({path,bytes,sha256})),chunks,command:'python3 -u -c '+quote(bootstrap)+' '+quote(target)+' '+quote(id)+' '+total,directory:target.replace(/\/$/,'')+'/wiu-'+id.slice(0,16)};
   }
-  return {prepare,sha,shaFallback};
+  function receipt(transfer,text){
+    const lines=String(text).split(/\r?\n/).map(s=>s.trim()),complete=lines.includes('COMPLETE: '+transfer.directory),hashes=lines.includes('Verified '+transfer.files.length+' files and all SHA-256 hashes.');
+    const received=complete||lines.some(line=>{const m=/^RECEIVED (\d+)\/(\d+)(?: |$)/.exec(line);return m&&Number(m[1])===transfer.chunks.length&&Number(m[2])===transfer.chunks.length;});
+    return {received,verified:complete&&hashes,generation:'unverified',compile:'unverified',simulation:'unverified'};
+  }
+  return {prepare,sha,shaFallback,receipt};
 });

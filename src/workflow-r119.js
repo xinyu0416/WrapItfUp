@@ -5,21 +5,30 @@ const dep=(key,file)=>root[key]||(typeof require==='function'?require('./'+file)
 const C=()=>dep('WIUCore','assembly-core.js'),A=()=>dep('WIUActions','assembly-actions.js'),I=()=>dep('WIUImportReview','import-review-r118.js');
 const clone=x=>JSON.parse(JSON.stringify(x));
 function pastedConnections(project,text){
- const pins=[...I().pinMap(project).values()],byName=new Map(pins.map(p=>[p.instanceName+'.'+p.port,p])),seen=new Set(),changes=[],errors=[];
- const lines=String(text).replace(/^\uFEFF/,'').split(/\r?\n/);
- lines.forEach((line,index)=>{if(!line.trim())return;const cols=line.split('\t');if(index===0&&/^(instance\.?pin|pin|接腳)$/i.test(cols[0].trim()))return;
-  if(cols.length!==2){errors.push('第 '+(index+1)+' 行需要兩欄：instance.pin、連線（以 Tab 分隔）');return;}
-  const name=cols[0].trim(),pin=byName.get(name),raw=cols[1].trim();
-  if(!pin){errors.push('第 '+(index+1)+' 行找不到 '+name);return;}if(seen.has(name)){errors.push('重複目標 '+name);return;}seen.add(name);
-  if(!raw){errors.push(name+' 的連線空白；請明寫 NC 或 UNSET');return;}
+ const pins=[...I().pinMap(project).values()],byName=new Map(pins.map(p=>[p.instanceName+'.'+p.port,p])),seen=new Set(),changes=[],rows=[],errors=[];
+ const top=C().resolveParameters({parameters:C().projectView(project).parameters||[]},{}).context;
+ let formatErrors=0;
+ String(text).replace(/^\uFEFF/,'').split(/\r?\n/).forEach((line,index)=>{if(!line.trim())return;
+  const cols=line.includes('\t')?line.split('\t'):line.trim().split(/\s+(.+)/s).slice(0,2);
+  if(/^(instance\.?pin|pin|接腳)$/i.test(cols[0].trim()))return;
+  const name=cols[0].trim(),raw=String(cols[1]??'').trim(),pin=byName.get(name),row={line:index+1,name,raw,errors:[],source:'',destination:name};rows.push(row);
+  if(cols.length!==2){row.errors.push('需要兩欄：instance.pin 與連線');formatErrors++;return;}
+  if(!pin){row.errors.push('找不到接腳 '+name);return;}if(seen.has(name)){row.errors.push('重複目標 '+name);return;}seen.add(name);
+  if(!raw){row.errors.push('空白不代表 NC，請填 NC 或 UNSET');return;}
   const expr=/^(NC|"")$/i.test(raw)?'':/^UNSET$/i.test(raw)?null:raw;
-  if(expr)try{C().parseExpression(C().expandDefines(expr,project));}catch(e){errors.push(name+'：'+e.message);return;}
+  if(expr)try{C().expressionInfo(C().expandDefines(expr,project),project.nets,top);}catch(e){row.errors.push(e.message);return;}
+  row.source=pin.direction==='output'?name:(expr===null?'未設定':expr===''?'NC':expr);row.destination=pin.direction==='output'?(expr||'NC'):name;row.direction=pin.direction;
   changes.push({instance:pin.instance,port:pin.port,expr});
  });
+ if(formatErrors)errors.push(formatErrors+' 列格式不完整；使用 Tab 分成兩欄，或以空白分開 instance.pin 與完整運算式。');
  const trial=clone(project);A().applyConnections(trial,changes);
  const issueKey=x=>x.code+'|'+JSON.stringify(x.ref)+'|'+x.message,existing=new Set(C().validate(project).filter(x=>x.severity==='error').map(issueKey));
- for(const issue of C().validate(trial).filter(x=>x.severity==='error'&&x.code!=='UNCONFIGURED_PIN'&&!existing.has(issueKey(x))))errors.push(issue.message);
- return {changes,errors:[...new Set(errors)],project:trial};
+ for(const issue of C().validate(trial).filter(x=>x.severity==='error'&&x.code!=='UNCONFIGURED_PIN'&&!existing.has(issueKey(x)))){
+  const c=trial.connections.find(c=>issue.ref?.type==='connection'&&c.id===issue.ref.id),pin=c&&pins.find(p=>p.instance===c.instance&&p.port===c.port),row=pin&&rows.find(r=>r.name===pin.instanceName+'.'+pin.port);
+  if(row)row.errors.push(issue.message);else errors.push(issue.message);
+ }
+ const bad=rows.filter(r=>r.errors.length);if(bad.length)errors.unshift(bad.length+' 列待修正，請直接修改紅色列後重新檢查。');
+ return {changes,rows,errors:[...new Set(errors)],project:trial};
 }
 function slices(project,keys,{name,start=0,direction='up',reverse=false}={}){
  if(!C().validName(name)||!Number.isSafeInteger(start)||start<0)throw Error('Bus 名稱與起始 bit 必須有效。');
