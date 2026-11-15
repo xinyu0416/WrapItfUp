@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WrapItfUp Public r125</title>
+<title>WrapItfUp Public r126</title>
+<style id="wiu-boot-style">body[data-wiu-boot]>:not(#wiu-boot-status){visibility:hidden!important;pointer-events:none!important}#wiu-boot-status{position:fixed;inset:0;display:grid;place-content:center;background:#f7f8f5;color:#263c43;font:16px system-ui;z-index:2147483647}</style>
 <link rel="stylesheet" href="./src/editor.css">
 <link rel="stylesheet" href="./src/toolbar-overflow.css">
 <link rel="stylesheet" href="./src/workspace-shell.css">
@@ -23,7 +24,8 @@
 <link rel="stylesheet" id="r119-workspace" href="./src/overlay-layers.css">
 <link rel="stylesheet" id="r120-workspace" href="./src/signal-table.css">
 </head>
-<body>
+<body class="a-assembly" data-wiu-boot="loading">
+<div id="wiu-boot-status" role="status">WrapItfUp · 正在載入…<noscript>請啟用 JavaScript 後重新開啟。</noscript></div>
 <div class="app">
   <header class="topbar">
     <div class="logo">↔</div><div class="brand"><b>WrapItfUp</b><span>WORKSPACE · R101</span></div>
@@ -162,6 +164,7 @@
 <script data-wiu-source="interaction-r124.js" src="./src/interaction-r124.js"></script>
 <script data-wiu-source="workspace-r119.js" src="./src/workspace-r119.js"></script>
 <script data-wiu-source="release-review-r122.js" src="./src/release-review-r122.js"></script>
+<script data-wiu-source="connection-review.js" src="./src/connection-review.js"></script>
 <script data-wiu-source="assembly-ui.js" src="./src/assembly-ui.js"></script>
 <script data-wiu-source="workspace-layout.js" src="./src/workspace-layout.js"></script>
 
@@ -284,5 +287,6 @@
 <template id="r81-guide"><article class="a-readme"><h2>WrapItfUp Public</h2><p>建立子模組介面，將 instance 放入 Top，完成接線後檢查並匯出。</p><ol><li>左側「＋」建立子模組，名稱在上方直接修改。</li><li>切到 Top 接線，使用「＋ Instance」加入模組；點兩個接腳連線。</li><li>「檢查」列出未接、位寬及驅動問題。</li><li>「RTL／工作包」匯出 RTL、org、Empty 與設定。Visio 按鈕下載 .vbs。</li></ol><p>Ctrl／Cmd＋Z 復原；Ctrl／Cmd＋Shift＋Z 重做。刪除模組會同步移除 instances 與相關接線，可復原。</p><p>專案存取在瀏覽器本機完成。公開版不含內部手冊、工具原始碼或內部教學資料。外部工具須自行提供與驗證。</p></article></template>
 
 <script data-wiu-source="workspace-r116.js" src="./src/workspace-r116.js"></script>
+<script data-wiu-source="startup.js" src="./src/startup.js"></script>
 </body>
 </html>
