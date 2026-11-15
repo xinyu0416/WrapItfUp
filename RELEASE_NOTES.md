@@ -13,14 +13,14 @@
 - 工作包文件改用當前版本；歷史相容性檢查與本次外部執行結果分開。參數標示區分預設／覆寫，並增加不同 instance 值的保存及匯出回歸。
 - 啟動完成前顯示載入狀態，避免舊介面先閃現。
 
-驗證：53 項公開自動測試；9／27 筆刪除、10 筆新增、孤立設定修復、接線預覽與參數介面的瀏覽器操作；真實 bash 接收器以 3 批、15 段還原 18 個通用檔案並核對 SHA-256。詳見 [r126 驗證](docs/VERIFICATION-r126.md)。
+驗證：54 項公開自動測試；9／27 筆刪除、10 筆新增、孤立設定修復、接線預覽與參數介面的瀏覽器操作；真實 bash 接收器以 3 批、15 段還原 18 個通用檔案並核對 SHA-256。詳見 [r126 驗證](docs/VERIFICATION-r126.md)。
 
 **限制：未取得這次實測的原始五 instance 專案及公司執行環境，因此未重跑該案例正常／Empty × ASIC／FPGA 的公司 gen_top、編譯或接線模擬。通用五 instance 測試不能代替此驗收。**
 
 ### English
 
 - Atomic Top-pin deletion previews and removes dependent bindings, assignments and Empty ties, with one undo.
-- Shared Empty validation exposes stale settings and supports direct removal/remapping.
+- Shared ASIC/FPGA Empty validation exposes stale settings and supports direct removal/remapping.
 - Batched interface edits avoid hidden Top routing; dialogs show work-in-progress and reject duplicate submissions.
 - Editable paste previews accept Tabs or unambiguous whitespace. Conservative wiring suggestions review direction, width, signedness and channel identity; Top exposure is explicit.
 - Stepwise Linux transfer starts with bash and separates clipboard, receipt, hashes, generation and compile/simulation states.
