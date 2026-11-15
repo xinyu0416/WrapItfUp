@@ -56,7 +56,7 @@ Any future split of the large retained editor or CSS layers should be a separate
 
 `assembly-actions.planRemoveNets()` computes the deletion impact without mutation; `removeNets()` rejects opaque references and cleans related bindings, assignments, Empty ties and route caches. `workbook.applyDiagram()` invokes the same plan for Top interface deletions. The UI confirms the complete result and commits one history patch.
 
-`assembly-bundle.validate()` remains the authoritative Empty validator. The editor retains orphan/duplicate ties as editable draft rows and feeds the full draft to this same validator; filtering never discards hidden invalid data.
+`assembly-bundle.validate()` remains the authoritative per-mode Empty validator. `assembly-company.emptyValidation()` merges ASIC/FPGA results for both the editor and work-package export. The editor retains orphan/duplicate ties as editable draft rows and feeds the full draft to this same validator; filtering never discards hidden invalid data.
 
 `connection-review.js` proposes data-only candidates. Selecting a candidate does not modify the project; the combined preview is validated before one commit. Signedness and resolved widths are preserved. No ambiguous candidate or Top promotion is silently selected.
 

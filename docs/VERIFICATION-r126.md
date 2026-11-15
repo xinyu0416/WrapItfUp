@@ -4,14 +4,14 @@ Date: 2026-11-15 UTC. Public generic fixtures only. This report records what was
 
 ## Automated checks
 
-`npm run release:check` passed: **53 tests, 0 failures**, Pages build, public artifact audit, and standalone build. Node tests execute the real application data modules.
+`npm run release:check` passed: **54 tests, 0 failures**, Pages build, public artifact audit, and standalone build. Node tests execute the real application data modules.
 
 | Case | Evidence / result |
 | --- | --- |
 | Two deleted Top outputs | 12 referring assignments and two Empty ties removed in one transaction; undo and redo restore/reapply the whole change |
 | Binding cleanup | Removed net references become unconfigured pins, not invented NC/constant bindings; exact identifiers and comments respected |
 | Opaque input | Unsupported references reject the deletion before mutation |
-| Orphan Empty settings | Missing and duplicate outputs are reported by the shared validator; export rejects unresolved settings and succeeds after repair |
+| Orphan Empty settings | Missing and duplicate outputs and ASIC/FPGA-specific expression failures are reported by the shared validator; export rejects unresolved settings and succeeds after repair |
 | Batch deletion | 9 and 27 pins removed from a 40-output generic fixture with matching assignments and Empty ties |
 | Batch creation | 10 inputs added together, preserving existing instance connections |
 | Wiring suggestions | Four generic port instances plus one distributor pair both directions by channel; ambiguous candidates remain separate; incompatible widths/signedness excluded; Top exposure explicit |
