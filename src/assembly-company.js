@@ -127,12 +127,20 @@
     return '#!/bin/csh -f\n# WrapItfUp '+releaseLabel()+': run from the extracted package directory.\n# Edit delivery-config.json for Top/tools/arguments/source links/environment.\n# Python 3 runs this helper; config.python is independently used for company gen_empty.\n# Each run creates runs/run-*/output; downloaded RTL is never overwritten.\nif ( ! -f delivery-config.json || ! -f run_wiu.py ) then\n  echo "Run from the extracted package directory containing delivery-config.json and run_wiu.py."\n  exit 1\nendif\nwhich python3 >& /dev/null\nif ( $status != 0 ) then\n  echo "Missing Python 3 for run_wiu.py. Load your company Python 3 environment and retry."\n  exit 1\nendif\npython3 run_wiu.py generate\nexit $status\n';
   }
 
+  function emptyValidation(project,config){
+    const cfg={...B.normalize(config||project.bundleConfig),dualMode:true},current=B.validate(project,cfg),groups=new Map();
+    try{for(const entry of B.profileProjects(project,cfg))for(const issue of B.validate(entry.project,cfg).errors){
+      const key=issue.code+'|'+issue.port+'|'+issue.message;let row=groups.get(key);if(!row){row={...issue,modes:[]};groups.set(key,row);}row.modes.push(entry.name);
+    }}catch(e){groups.set('mode',{severity:'error',code:'PROFILE_MODE',message:e.message,port:'',modes:[]});}
+    return {...current,errors:[...groups.values()].map(i=>({...i,message:i.message+(i.modes.length?'（'+i.modes.join(' / ').toUpperCase()+'）':'')}))};
+  }
   function prepare(project,config){
     const cfg={...B.normalize(config||project.bundleConfig),dualMode:true,includeReferences:false};
     if(cfg.profiles.some(p=>!['asic','fpga'].includes(p.name)))fail('COMPANY_PROFILES','公司範例只產生 ASIC／FPGA。請移除其他命名快照，或提供該組態的原始執行範例。');
+    const empty=emptyValidation(project,cfg);if(empty.errors.length){const error=Error(empty.errors.map(i=>i.message).join('\n'));error.issues=empty.errors;throw error;}
     const entries=B.profileProjects(project,cfg),modes={};
     for(const entry of entries){
-      const p=entry.project,errors=B.exportIssues(p).concat(B.validate(p,cfg).errors);
+      const p=entry.project,errors=B.exportIssues(p);
       if(errors.length){const error=Error(errors.map(i=>i.message).join('\n'));error.issues=errors;throw error;}
       B.assertModeSelector(p,entry.name);B.assertSourceIsolation(p,entry.name,sourceMap(p));
       if(!p.instances.length)fail('COMPANY_NO_INSTANCES','原始腳本未使用 -noinst。請先加入子模組，或提供空 Top 的公司範例。');
@@ -245,5 +253,5 @@
     return list;
   }
   function review(project,config){const prepared=prepare(project,config);return B.reviewText(project.top,Object.entries(prepared.modes).map(([name,mode])=>B.wiringReview(mode.project,prepared.config,name))).replaceAll('modes/MODE/','');}
-  return {files,prepare,pending,org,verilog,header,stub,review,script,scriptConfig,scriptPlan,companyCompatibility};
+  return {files,prepare,emptyValidation,pending,org,verilog,header,stub,review,script,scriptConfig,scriptPlan,companyCompatibility};
 });

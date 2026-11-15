@@ -246,7 +246,7 @@ root.WIUWorkflowPanel=function(h){
   function stubModel(){
     const ui=stubEditing;if(!ui)return null;
     const ties=$$('[data-stub-port]').filter(x=>x.value.trim()).map(x=>({port:x.dataset.stubPort,expr:x.value.trim()}));
-    const config={...ui.config,outputTies:ties.concat(ui.retained.filter(x=>!x.removed).map(x=>({port:x.port,expr:x.expr})))},validation=B.validate(ui.project,config),issues=[...validation.errors];
+    const config={...ui.config,outputTies:ties.concat(ui.retained.filter(x=>!x.removed).map(x=>({port:x.port,expr:x.expr})))},validation=K.emptyValidation(ui.project,config),issues=[...validation.errors];
     return {config,validation,issues};
   }
   function stubWidth(name,result){
@@ -291,7 +291,7 @@ root.WIUWorkflowPanel=function(h){
       extras.innerHTML=rows.length?'<h3>需核對的既有設定</h3><p>這些設定失去對應 output 或重複。請移除，或重新指定；確認套用前不會改動專案。</p>'+rows.map(r=>'<div class="a-note" data-retained-row="'+r.index+'"><b>'+esc(r.originalPort)+'</b><code> = '+esc(r.expr)+'</code><label>重新指定 output<select data-stub-remap="'+r.index+'" aria-label="重新指定 '+esc(r.originalPort)+'"><option value="'+esc(r.port)+'">'+esc(r.port)+(stubEditing.ports.some(n=>n.name===r.port)?'':'（已不存在／不是有效 output）')+'</option>'+stubEditing.ports.filter(n=>n.name!==r.port).map(n=>'<option value="'+esc(n.name)+'">'+esc(n.name)+'</option>').join('')+'</select></label><span role="status">'+esc((errorsBy.get(r.port)||[]).join('；')||'重新指定已通過 Empty 檢查，待套用')+'</span><button aria-label="移除 '+esc(r.originalPort)+' 設定" data-action="r126-tie-remove" data-id="'+r.index+'">移除此設定</button></div>').join(''):'';
     }
     const unidentified=issues.filter(i=>!i.port);
-    errSummary.innerHTML=issues.length?'<strong>'+issues.length+' 個檢查錯誤（'+errorPorts.length+' 個欄位）<\/strong><p>點選問題名稱可跳到該輸入框，不會把錯誤藏到表格底部。<\/p>'+errorPorts.map(name=>'<button class="r85-stub-error-link" data-action="r85-stub-locate" data-id="'+esc(name)+'">'+esc(name)+'：'+esc((errorsBy.get(name)||[])[0])+'<\/button>').join('')+unidentified.map(i=>'<p>'+esc(i.message)+'<\/p>').join(''):'<span>✓ Empty 表達式檢查通過；但尚未在 Linux 生成或模擬。<\/span>';
+    errSummary.innerHTML=issues.length?'<strong>'+issues.length+' 個檢查錯誤（'+errorPorts.length+' 個欄位）<\/strong><p>點選問題名稱可跳到該輸入框，不會把錯誤藏到表格底部。<\/p>'+errorPorts.map(name=>'<button class="r85-stub-error-link" data-action="r85-stub-locate" data-id="'+esc(name)+'">'+esc(name)+'：'+esc((errorsBy.get(name)||[])[0])+'<\/button>').join('')+unidentified.map(i=>'<p>'+esc(i.message)+'<\/p>').join(''):'<span>✓ ASIC／FPGA Empty 表達式檢查通過；但尚未在 Linux 生成或模擬。<\/span>';
     errSummary.classList.toggle('r85-invalid-status',!!issues.length);
     const count=$('#r85-stub-count');if(count)count.textContent='顯示 '+visible+' / '+stubEditing.ports.length+' 個有效 output · '+stubEditing.retained.filter(x=>!x.removed).length+' 筆需核對設定 · '+model.config.outputTies.length+' 個明確覆寫 · '+(stubEditing.ports.length-new Set(model.config.outputTies.filter(t=>stubEditing.ports.some(p=>p.name===t.port)).map(t=>t.port)).size)+' 個預設 · '+selected.length+' 個勾選';
     if(focusFirst&&issues.length){
