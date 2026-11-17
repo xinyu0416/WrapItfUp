@@ -31,7 +31,7 @@ function repairs(scene, {maxFixes=16}={}){
  };
  const budget=Math.max(60,2*maxFixes);
  let checked=new Set();
- while(fixed<maxFixes&&tries<budget&&before.summary.unresolved){
+ while((!Number.isFinite(root.WIURoutingDeadline)||Date.now()<root.WIURoutingDeadline)&&fixed<maxFixes&&tries<budget&&before.summary.unresolved){
   const issues=before.issues.filter(i=>i.kind==='unresolved'&&i.edgeIndices?.length);
   const frequency=new Map();for(const issue of issues)for(const e of issue.edgeIndices)frequency.set(e,(frequency.get(e)||0)+1);
   const nextIssues=issues.filter(i=>!skipped.has(issueKey(i))).sort((a,b)=>Math.max(...b.edgeIndices.map(e=>frequency.get(e)))-Math.max(...a.edgeIndices.map(e=>frequency.get(e))));

@@ -19,3 +19,5 @@
 .wb-canvas-scroll{contain:layout paint}.wb-canvas.r82-scene{box-shadow:none}
 
 .wb-canvas-scroll[data-overview="true"]::after{content:"總覽模式 · 放大即可編輯接腳與線名";position:absolute;left:12px;bottom:12px;padding:6px 10px;background:#edf5f3ee;border:1px solid #c7dcd6;border-radius:5px;color:#315b52;font-size:12px;pointer-events:none}
+
+.r131-issues{overflow:auto;margin:14px 0;border:1px solid #ccdcd6;border-radius:6px}.r131-issues table{border-collapse:collapse;width:100%;font-size:12px;background:white}.r131-issues th{background:#edf4f1;text-align:left;padding:10px;white-space:nowrap}.r131-issues td{padding:10px;border-top:1px solid #dce7e2;vertical-align:top;overflow-wrap:anywhere;min-width:85px}.r131-issues td:nth-child(2),.r131-issues td:nth-child(3){min-width:170px}.r131-issues code{font:12px/1.6 Consolas,monospace;color:#173e34}.r131-issues td:last-child{white-space:nowrap}.r131-issues details{margin-top:6px;color:#536e63}.r131-issues summary{cursor:pointer}

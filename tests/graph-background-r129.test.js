@@ -63,3 +63,20 @@ test('dense interactive worker and immediate VBS export preserve every route and
  S.prime(p,result.scene);const saved=S.withDrawingSnapshot(p);assert.equal(C.exportVerilog(saved),C.exportVerilog(before));assert.deepEqual(K.files(saved),K.files(before));
  const output=await runner.run({kind:'export',project:before,options:{mode:'fixed'}});assert.ok(output.vbs.length>1000);assert.deepEqual(p,before);assert.equal(Object.keys(saved.workbook.graphAutoR99.routes).length,preview.edges.length);
 });
+test('explicit repair grows congested drawing space, preserves electrical data and supports one undo/redo',async()=>{
+ const H=require('../src/history'),p=f(16,16),before=clone(p),runner=B.createRunner({makeWorker:workerFactory,timeout:30000});
+ const r=await runner.run({kind:'layout',options:{kind:'repair'},project:p});assert.equal(r.unchanged,false);assert.ok(r.after.width>r.before.width||r.after.height>r.before.height);
+ for(const k of Object.keys(p).filter(k=>k!=='workbook'))assert.deepEqual(r.project[k],p[k]);
+ assert.ok(r.after.routeQualityR98.summary.parallelSpacing.count<r.before.routeQualityR98.summary.parallelSpacing.count);
+ assert.ok(r.after.routeQualityR98.summary.finalInvalid<=r.before.routeQualityR98.summary.finalInvalid);
+ assert.deepEqual(r.after.edges.map(e=>[e.source,e.target,e.net]),r.before.edges.map(e=>[e.source,e.target,e.net]));
+ const entry={patch:H.changes(p,r.project)};assert.deepEqual(H.apply(r.project,entry,true),before);assert.deepEqual(H.apply(before,entry,false),r.project);assert.equal(C.exportVerilog(r.project),C.exportVerilog(p));assert.deepEqual(W.read(W.envelope(r.project)).project,r.project);
+ const locked=clone(p);locked.workbook.graphAutoR99=S.snapshotScene(locked,r.before);locked.workbook.layoutLocks=['u0'];const lockResult=await runner.run({kind:'layout',options:{kind:'repair'},project:locked});const pick=s=>{const b=s.placed.find(b=>b.instance.id==='u0');return [b.x,b.y,b.width,b.height];};assert.deepEqual(pick(lockResult.before),pick(lockResult.after));
+});
+test('repair reports no improvement instead of pretending that a clean diagram changed',async()=>{
+ const p=f(1,1),runner=B.createRunner({makeWorker:workerFactory,timeout:10000}),r=await runner.run({kind:'layout',options:{kind:'repair'},project:p});assert.equal(r.unchanged,true);assert.deepEqual(r.project,p);assert.match(r.note,/沒有找到/);
+});
+test('fine repair remains available and clean/manual geometry is not silently replaced',async()=>{
+ const p=f(1,1),scene=S.create(p,{full:true});p.workbook.graphAutoR99=S.snapshotScene(p,scene);const first=Object.keys(p.workbook.graphAutoR99.routes)[0];p.workbook.graphAutoR99.routes[first].manual=true;
+ const runner=B.createRunner({makeWorker:workerFactory,timeout:10000}),r=await runner.run({kind:'layout',options:{kind:'fine'},project:p});assert.equal(r.unchanged,true);assert.deepEqual(r.project,p);
+});

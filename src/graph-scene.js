@@ -204,7 +204,7 @@ function layoutScore(x){
  return 10000*(q?.finalInvalid||0)+1000*(q?.parallelSpacing?.count||0)+100*(x.crossingSummary?.overlaps||0)+(x.crossingSummary?.unresolved||0);
 }
 function spreadAutomatic(project,scene){
- const candidate=Track.expand(scene,snapshotScene(project,scene),project.workbook?.graphPositions);
+ const candidate=Track.expand(scene,snapshotScene(project,scene),Object.fromEntries(scene.placed.filter(b=>(project.workbook?.layoutLocks||[]).includes(b.instance.id)).map(b=>[b.instance.id,{x:b.x,y:b.y}])));
  if(!candidate)return null;
  const drawing=snap=>create({...project,workbook:{...project.workbook,graphAutoR99:snap}});
  const spread=drawing(candidate);
@@ -217,6 +217,10 @@ function spreadAutomatic(project,scene){
  if(!spacing.moves&&!corners.fixed)return spread;
  const checked=drawing(snapshotScene(project,repaired));
  return layoutScore(checked)<layoutScore(spread)?checked:spread;
+}
+function expandSpace(project,scene){
+ const locks=new Set(project.workbook?.layoutLocks||[]),pinned=Object.fromEntries(scene.placed.filter(b=>locks.has(b.instance.id)).map(b=>[b.instance.id,{x:b.x,y:b.y}]));
+ return Track.expand(scene,snapshotScene(project,scene),pinned);
 }
 function capture(project){
  const pending=pendingFreeze(project);
@@ -285,7 +289,7 @@ function prepare(project,{force=false}={}){
  if(!inspected&&original.style.route==='orthogonal'&&(initial.space||initial.jump)&&(previous||original.autoSize?.trackSpace)){
   // Compare the old geometry before it is locally modified: inserting free space can
   // preserve many more existing paths than first individually moving those routes.
-  const mayExpand=previous&&previous.repairVersion!==106&&!force;
+  const mayExpand=previous&&(force||previous.repairVersion!==106);
   const expanded=mayExpand?spreadAutomatic(project,original):null;
   const seed=expanded&&score(counts(expanded))<score(initial)?expanded:original;
   const seedCounts=counts(seed);
@@ -327,13 +331,18 @@ function create(project,{fast=false,full=false}={}){
   for(const g of topGroups){g.top=Y(g.top+40)-40;g.bottom=Y(g.bottom-22)+22;}
  }
  const autoSize=frozen?{placed:rawPlaced.map(b=>{const initial=frozen.placed[b.instance.id],original=frozen.inputPositions?.[b.instance.id],current=project.workbook?.graphPositions?.[b.instance.id];const changed=JSON.stringify(current||null)!==JSON.stringify(original||null);return {...(trackSpace?Track.block(b,trackSpace):b),x:changed&&current?current.x:initial?.x??b.x,y:changed&&current?current.y:initial?.y??b.y};}),expansion:{...frozen.autoSize,manual:true,active:false}}:rawPlaced.some(b=>b.shape==='bar')?{placed:rawPlaced,expansion:{active:false,changedInstances:0,widthAdded:0,heightAdded:0}}:Auto.plan(project,rawPlaced,{leftX,headerBottom}),placed=autoSize.placed;
- const rightX=Math.max(leftX+1050,...placed.map(b=>b.x+b.width+580))+(autoSize.expansion.extraRight||0),width=rightX+outer+24,height=Math.max(500,...placed.map(b=>b.y+b.height+(b.barColumns?.bottom.length?140:70)),150+Math.max(top.left.length,top.right.length)*48,...Object.values(topRows).flat().map(r=>r.y+100))+(autoSize.expansion.extraBottom||0);
+ // Reserve distinct outer lanes before routing. Different Top nets must
+ // never collapse onto the same generic 40-unit escape column.
+ const topLanes=frozen?.autoSize?.topLanes||(!frozen&&!(project.workbook.layoutLocks||[]).length?{pitch:28,left:topRows.left.length,right:topRows.right.length}:null);
+ if(topLanes){autoSize.expansion.topLanes=topLanes;if(!frozen&&placed.length){const dx=Math.max(0,leftX+120+topLanes.left*topLanes.pitch-Math.min(...placed.map(b=>b.x)));if(dx){for(const b of placed)b.x+=dx;autoSize.expansion.widthAdded=(autoSize.expansion.widthAdded||0)+dx;autoSize.expansion.changedInstances=placed.length;}}}
+ const rightReserve=Math.max(580,topLanes?120+topLanes.right*topLanes.pitch:0);
+ const rightX=Math.max(leftX+1050,...placed.map(b=>b.x+b.width+rightReserve))+(autoSize.expansion.extraRight||0),width=rightX+outer+24,height=Math.max(500,...placed.map(b=>b.y+b.height+(b.barColumns?.bottom.length?140:70)),150+Math.max(top.left.length,top.right.length)*48,...Object.values(topRows).flat().map(r=>r.y+100))+(autoSize.expansion.extraBottom||0);
  const rawHeight=Math.max(500,...rawPlaced.map(b=>b.y+b.height+(b.barColumns?.bottom.length?140:70)),150+Math.max(top.left.length,top.right.length)*48,...Object.values(topRows).flat().map(r=>r.y+100));
  if(!frozen)autoSize.expansion.heightAdded=Math.max(0,height-rawHeight);
  autoSize.expansion.active=!frozen&&(autoSize.expansion.changedInstances>0||autoSize.expansion.widthAdded>0||autoSize.expansion.heightAdded>0);
  const obstacles=placed.map(b=>({x:b.x,y:b.y,width:b.width,height:b.height}));
  const denseRouting=!!root.WIUInteractiveRouting&&project.connections.length>200;
- const quickRouter=denseRouting?FastRoute.router(obstacles,{minX:leftX+42,maxX:rightX-42,minY:headerBottom+42}):null;
+ const quickRouter=(denseRouting||topLanes)?FastRoute.router(obstacles,{minX:leftX+30,maxX:rightX-30,minY:headerBottom+30,maxY:height-48,leftLaneEnd:topLanes?leftX+64+topLanes.left*topLanes.pitch:null,rightLaneStart:topLanes?rightX-64-topLanes.right*topLanes.pitch:null}):null;
  const ink=style.monochrome?'#222222':'#392849',muted=style.monochrome?'#555555':'#615a67';
  const note=(label,value,kind='expression')=>notes.push({label,value:String(value),kind});
  const text=(value,x,y,align='start',options={})=>{const t=D.text(value,x,y,align,{size:12,color:ink,...options},measure);items.push(t);return t;};
@@ -398,7 +407,7 @@ function create(project,{fast=false,full=false}={}){
  }
  for(const g of topGroups){groups.push(g);paint.push(()=>drawGroup(g,g.side==='left'?12:rightX+12,g.top,outer-24,g.bottom-g.top,g.color));}
  for(const side of ['left','right'])topRows[side].forEach(({p,index,y,g,key:gkey})=>{const key='top::'+p.id,x=side==='left'?leftX:rightX,cc=g?S.color(project,gkey,topDiagram.groups[side].indexOf(g),g.name,g.color):muted;
-  points.set(key,{x:x+(side==='left'?7:-7),y,side:side==='left'?'right':'left',outerSide:side,key,index,padX:x});
+  points.set(key,{x:x+(side==='left'?7:-7),y,side:side==='left'?'right':'left',outerSide:side,key,index,padX:x,...(topLanes?{trackX:x+(side==='left'?1:-1)*(48+index*topLanes.pitch)}:{})});
 
   paint.push(()=>{glyph(x,y,p.direction,side,cc,key);text(p.name+(endByKey.get(key)?.width===1?'':p.range||''),x+(side==='left'?-18:18),y,side==='left'?'end':'start',{size:12,bold:true,role:'top-port-name',key});if(p.comment)text(p.comment,x+(side==='left'?-18:18),y+17,side==='left'?'end':'start',{size:10,color:muted,role:'port-comment',key});});
  });
@@ -500,7 +509,7 @@ function create(project,{fast=false,full=false}={}){
  const fanoutGroups=[...bySource.values()].filter(g=>g.length>1&&g[0].source.startsWith('top::')&&points.get(g[0].source)?.outerSide==='left').sort((a,b)=>a[0].net.localeCompare(b[0].net));
  const firstBlockX=Math.min(...placed.map(b=>b.x));
  const tapLabelGutter=Math.max(76,...edges.filter(e=>e.selection).map(e=>measure(e.selection,'11px')*1.14+88));
- for(let groupIndex=0;!frozen&&groupIndex<fanoutGroups.length;groupIndex++){
+ for(let groupIndex=0;!frozen&&!quickRouter&&groupIndex<fanoutGroups.length;groupIndex++){
   const group=fanoutGroups[groupIndex],origin=points.get(group[0].source);
   const trunkX=Math.max(leftX+55,firstBlockX-tapLabelGutter-groupIndex*33);
   if(trunkX<=origin.x+24)continue;
@@ -529,7 +538,7 @@ function create(project,{fast=false,full=false}={}){
  // Resolve unsafe same-track occupancy BEFORE trying to position text.
  // Both scene and exporters subsequently use these identical routed points.
  if(!fast)root.WIURouteProgress?.({phase:'檢查與修復線距'});
- const routingScene={placed,points:Object.fromEntries(points),edges,items,topBoundary:{left:leftX,right:rightX,headerBottom},canvasBounds:{height},width,height};
+ const routingScene={placed,points:Object.fromEntries(points),edges,items,topBoundary:{left:leftX,right:rightX,headerBottom,bottom:height-18,lanes:topLanes},canvasBounds:{height},width,height};
  const spacing=root.WIURoutingSpacingR98||(typeof require==='function'?require('./routing-spacing-r98'):null);
  const bounded=!!root.WIUInteractiveRouting&&edges.length>120;
  const routingResult=!fast&&style.route==='orthogonal'?(automatic&&!denseRouting?RQ.improve(routingScene,{limit:bounded?48:Infinity}):{summary:{changed:0,parallelSpacing:spacing.scan(routingScene,{limit:500}),finalInvalid:0,unresolved:0,mode:pending?'deferred':'manual'}}):null;
@@ -666,7 +675,7 @@ function create(project,{fast=false,full=false}={}){
  // Diagnostics belong in the editor, never inside the exported electrical drawing.
  for(const n of notes.filter(n=>!['routing','electrical'].includes(n.kind))){text(n.label+' = '+n.value,leftX,appendixY,'start',{size:11,role:'annotation'});appendixY+=20;}
  const bb=D.bounds(items),sceneWidth=Math.max(width,bb.x+bb.width+10),sceneHeight=Math.max(height,appendixY+20);
- const completed={previewOnly:fast,boundedRouting:bounded,autoSize:autoSize.expansion,routeQualityR98:routingResult,crossingSummary:{...geometry.summary,trackMoves},crossingIssues:geometry.issues,width:sceneWidth,height:sceneHeight,canvasBounds:{width:sceneWidth,height:sceneHeight},bounds:{x:0,y:0,width:sceneWidth,height:sceneHeight},items,edges,notes,bridgePlan:geometry.marks.filter(m=>m.kind==='bridge'),points:Object.fromEntries(points),groups,placed,labels,labelOverflow,topBoundary:{left:leftX,right:rightX,headerBottom},style,routingMode:pending?'deferred':frozen?'manual':'auto',pendingRouting:!!pending,autoLocalRepairs,routeSearchFallbacks:edges.filter(e=>!e.routed&&!e.manual).length};
+ const completed={previewOnly:fast,boundedRouting:bounded,autoSize:autoSize.expansion,routeQualityR98:routingResult,crossingSummary:{...geometry.summary,trackMoves},crossingIssues:geometry.issues,width:sceneWidth,height:sceneHeight,canvasBounds:{width:sceneWidth,height:sceneHeight},bounds:{x:0,y:0,width:sceneWidth,height:sceneHeight},items,edges,notes,bridgePlan:geometry.marks.filter(m=>m.kind==='bridge'),points:Object.fromEntries(points),groups,placed,labels,labelOverflow,topBoundary:{left:leftX,right:rightX,headerBottom,bottom:height-18,lanes:topLanes},style,routingMode:pending?'deferred':frozen?'manual':'auto',pendingRouting:!!pending,autoLocalRepairs,routeSearchFallbacks:edges.filter(e=>!e.routed&&!e.manual).length};
  // Geometry quality closure: when an initial automatic solution is still
  // unsafe, expand the Top and retry ONCE. A failed retry remains a diagnostic,
  // never a falsely certified success. No retry on frozen/manual diagrams.
@@ -746,5 +755,5 @@ function exportDrawing(project,options={}){
  return {vbs:text,actualMode,diagnostics:check,fallbackError,preparedSnapshot};
 }
 function vbs(project,options={}){return exportDrawing(project,options).vbs;}
-const api={create,sceneKey,peek,prime,snapshotScene,withDrawingSnapshot,spreadAutomatic,svg,vbs,exportDrawing,prepare,wireMarks,capture,topologySignature,routeIdentity,layoutIdentity,deferConnections,validFreeze,frozenPath,exportDiagnostics};root.WIUTopScene=api;if(typeof module==='object')module.exports=api;
+const api={create,sceneKey,peek,prime,snapshotScene,withDrawingSnapshot,spreadAutomatic,expandSpace,svg,vbs,exportDrawing,prepare,wireMarks,capture,topologySignature,routeIdentity,layoutIdentity,deferConnections,validFreeze,frozenPath,exportDiagnostics};root.WIUTopScene=api;if(typeof module==='object')module.exports=api;
 })(globalThis);

@@ -1,8 +1,8 @@
 # WrapItfUp
 
-**Public r130 · Module interfaces → Top wiring → RTL and diagram handoff**
+**Public r132 · Module interfaces → Top wiring → RTL and diagram handoff**
 
-[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r130.md)
+[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r132.md)
 
 WrapItfUp 把子模組介面、Top 實例接線、RTL 與圖面放在同一份設計中。先定義或匯入模組，放入實例，完成接線，再帶走可繼續編輯的專案與交付檔案。
 
@@ -18,6 +18,18 @@ This repository contains the maintainable application source, public examples, r
 4. 修改訊號、位寬、方向、群組和參數，再到 Top 接線頁完成連接並查看檢查結果。
 5. 儲存 `.wiu.json` 專案；由「產生 RTL／gen_top」下載 RTL、VBS 或 Linux 工作包。
 6. 文字傳送時依序執行 `bash`、接收器、資料批次、`CHECK`，每次貼上後按 Enter。貼回終端回報核對檔案數與 SHA-256，再於 Linux 執行產生與驗證。網站檢查不代表 Linux 已執行。
+
+### r132 外側線距與接線檢閱
+
+Top 最外側改用獨立線道，必要時擴大空間；舊圖可用「排列與走線 → 重新自動走線」預覽後套用。選取線段可使用 Driver／Load 定位、輪巡 Load 與返回原視野。接線表顯示來源 Instance / Group / Pin、方向、位寬、目的 Instance / Group / Pin、狀態與操作。
+
+89 項自動測試及離線建置通過，完整人工介面與大型專案輸出比對尚未完成；圖內仍有線距／重疊提醒。見 [本版驗證狀態](docs/VERIFICATION-r132.md)。從 r130 更新請見 [更新方式](docs/UPDATE-r130-r132.md)。
+
+### r131 檢查明細與線距修復
+
+「檢查」直接列出每筆 instance、訊號／接腳、目前設定與原因；需要修改時才按「前往修正」。在 Top「排列與走線 → 修復線距與擴大空間」比較重排前後的圖面尺寸與衝突，再決定是否套用。套用可一次 Undo／Redo。手動線與鎖定方塊保留，沒有改善時不變更設計；較慢的「精細局部修復」另列並可取消。
+
+實際大型設計的線距不足由 8,858 降至 6,797，但仍有大量擁擠，不能當作全部通過。首次開啟大型圖仍採下述快速路徑；完整驗證與舊需求盤點見 [r131 紀錄](docs/VERIFICATION-r131.md)。
 
 ### r130 大型接線圖
 
@@ -52,7 +64,7 @@ This repository contains the maintainable application source, public examples, r
 
 ### 名稱與檔案用途
 
-產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r130-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
+產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r132-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
 
 | 檔案 | 用途 |
 | --- | --- |
@@ -96,6 +108,14 @@ The module list owns definitions; the Top view owns instances and wiring. Editab
 
 For Linux text transfer, follow the separate `bash`, receiver, data batches and `CHECK` steps, pressing Enter after each paste. Clipboard success is separate from receiver confirmation, file hashes, generation, compilation and simulation. Orphan Empty settings can be removed or reassigned in the UI. Top-pin deletion previews related connections, assignments and Empty settings and commits one undoable transaction.
 
+### r132 outer lanes and connection review
+
+Top boundary routing reserves separate lanes and expands available space. Use the explicit reroute preview to upgrade an older saved drawing. Selecting a wire exposes Driver/Load navigation, Load cycling and return-to-view. The review table shows both Instance / Group / Pin paths, direction, width, status and actions. All 89 automated tests and release builds passed; full manual UI and large-project output comparisons remain pending. Interior geometry conflicts remain visible. See [verification status](docs/VERIFICATION-r132.md) and [r130 update instructions](docs/UPDATE-r130-r132.md).
+
+### r131 issue details and spacing repair
+
+The check page directly lists instance, pin, current binding and reason. Use Top's layout menu → **修復線距與擴大空間** to preview expanded/rerouted geometry, dimensions and diagnostics before applying one undoable transaction. Manual routes and locked blocks are preserved; no improvement leaves the project unchanged. Slow local repair remains a separate cancellable action. Dense first opening still uses bounded routing. Real-design spacing conflicts decreased from 8,858 to 6,797, but significant congestion remains; see the [verification and prior-requirement review](docs/VERIFICATION-r131.md).
+
 ### r130 large wiring diagrams
 
 Dense diagrams use bounded local background routing and full final checks. Expensive spacing/corner repair is an explicit operation under the layout menu. The screen renders nearby geometry and hit targets; below 35% zoom, overview mode omits unreadable pin/name controls and restores them when zoomed in. Offscreen search uses full-scene coordinates. Project data and exports remain complete.
@@ -122,7 +142,7 @@ Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z redoes, Ctrl+Y also redoes on Windows/Linux.
 
 The public edition excludes internal manuals, original external-tool code, internal teaching projects, private verification records, and proprietary stencils. The bundled example is generic. Design processing runs in the browser, with no application design-upload endpoint or analytics; normal hosting requests still reach the hosting provider.
 
-External gen_top/gen_empty tools are separate user-provided dependencies. Existing org directive syntax remains intact. Exporting compatible files does not establish external-tool execution, successful RTL simulation, or functional equivalence. Visio automation requires a supported Windows/Visio environment. See the [verification report](docs/VERIFICATION-r130.md) for what this release actually checks.
+External gen_top/gen_empty tools are separate user-provided dependencies. Existing org directive syntax remains intact. Exporting compatible files does not establish external-tool execution, successful RTL simulation, or functional equivalence. Visio automation requires a supported Windows/Visio environment. See the [verification report](docs/VERIFICATION-r131.md) for what this release actually checks.
 
 ## Repository / 專案結構
 
@@ -160,7 +180,7 @@ npm run build:offline
 npm run release:check
 ```
 
-`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r130-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r130-offline` artifact from a successful Actions run while it remains available.
+`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r132-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r132-offline` artifact from a successful Actions run while it remains available.
 
 ### GitHub Pages
 

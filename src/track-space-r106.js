@@ -61,16 +61,18 @@ function make(scene,pinned={}){
    for(const y of [v.lo,v.hi])add('y',y,h.k,10);
   }
  }
- const lockedX=[...Object.values(scene.points)].filter(p=>Number.isFinite(p.padX)).map(p=>[p.padX-7,p.padX+7]);
+ const rigid=scene.placed.filter(b=>b.shape==='bar'||pinned[b.instance.id]),lockedY=rigid.map(b=>[b.y,b.y+b.height]);
+ const lockedX=[...rigid.map(b=>[b.x,b.x+b.width]),...[...Object.values(scene.points)].filter(p=>Number.isFinite(p.padX)).map(p=>[p.padX-7,p.padX+7])];
  // Add both ends of rigid pad intervals as anchors so no cut moves a pad tip
  // relative to its owning block or Top wall.
  for(const [a,b] of lockedX)constraints.x.push([a,b,0]);
+ for(const [a,b] of lockedY)constraints.y.push([a,b,0]);
  function keepPins(cuts,axis,guard){
   const fixed=Object.values(pinned).filter(p=>Number.isFinite(p[axis]));if(!fixed.length)return cuts;
   const until=Math.max(...fixed.map(p=>p[axis]+guard)),offset=mapped(cuts,until)-until;
   return cuts.filter(c=>c[0]>until).map(([at,extra])=>[at,extra-offset]);
  }
- const x=keepPins(axisCuts(constraints.x,lockedX),'x',7),y=keepPins(axisCuts(constraints.y,[]),'y',0);
+ const x=keepPins(axisCuts(constraints.x,lockedX),'x',7),y=keepPins(axisCuts(constraints.y,lockedY),'y',0);
  return x.length||y.length?{x,y,origin:Object.fromEntries(scene.placed.map(b=>[b.instance.id,[b.x,b.y]]))}:null;
 }
 function block(b,map){

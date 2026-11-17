@@ -43,8 +43,9 @@ function metrics(pts,net,used=[]){let length=0,overlapCost=0;for(const s of segs
 function contextFor(scene){
  const blocks=scene.placed.map(p=>({id:p.instance.id,x:p.x,y:p.y,w:p.width,h:p.height}));
  const pads=Object.values(scene.points).map(p=>({id:p.key,x:p.x,y:p.y,instance:p.instance,side:p.side}));
- return {blocks,moats:blocks.map(o=>inflate(o,MOAT)),pads,top:{left:scene.topBoundary.left,right:scene.topBoundary.right,top:scene.topBoundary.headerBottom??66,bottom:scene.canvasBounds.height-18}};
+ return {blocks,moats:blocks.map(o=>inflate(o,MOAT)),pads,top:{left:scene.topBoundary.left,right:scene.topBoundary.right,top:scene.topBoundary.headerBottom??66,bottom:scene.topBoundary.bottom??scene.canvasBounds.height-18}};
 }
+const expired=()=>Number.isFinite(root.WIURoutingDeadline)&&Date.now()>=root.WIURoutingDeadline;
 function valid(pts,edge,scene,ctx){
  const {blocks,moats,pads,top}=ctx;const src=scene.points[edge.source],dst=scene.points[edge.target];
  if(!pts||pts.length<2||!src||!dst||!same(pts[0],src)||!same(pts.at(-1),dst))return false;
@@ -58,9 +59,11 @@ function valid(pts,edge,scene,ctx){
  // Only a terminal's own strictly outward FIRST or LAST lead may traverse
  // its owner Block's 28px moat; no wire may touch any foreign pad glyph.
  for(let i=0;i<pts.length-1;i++){
-  const a=pts[i],b=pts[i+1];
+  const a=pts[i],b=pts[i+1],lanes=scene.topBoundary.lanes;
+  if(lanes&&eq(a.x,b.x)&&(a.x<top.left+64+lanes.left*lanes.pitch||a.x>top.right-64-lanes.right*lanes.pitch)&&![src.trackX,dst.trackX].some(x=>Number.isFinite(x)&&eq(x,a.x)))return false;
   // Keep ALL geometry outside the top title cap + two-pad-width corridor.
   if(Math.min(a.y,b.y)<top.top+MOAT-EPS)return false;
+  if(Math.max(a.y,b.y)>top.bottom-MOAT+EPS||Math.min(a.x,b.x)<top.left-EPS||Math.max(a.x,b.x)>top.right+EPS)return false;
   if(eq(a.x,b.x)&&a.x>top.left-EPS&&a.x<top.left+MOAT-EPS)return false;
   if(eq(a.x,b.x)&&a.x<top.right+EPS&&a.x>top.right-MOAT+EPS)return false;
   for(let j=0;j<moats.length;j++){
@@ -128,7 +131,7 @@ function resolve(edge,scene,ctx,used){
  const start={ix:sx,iy:sy,dir:0,cost:0,priority:0,parent:null};const heap=new Heap();heap.push(start);
  const dists=new Map([[`${sx},${sy},0`,0]]);let goal=null,popped=0;
  // Grid edges only run along rows/columns; each turn is charged heavily.
- while(heap.size&&popped++<15000){const p=heap.pop(),k=p.ix+','+p.iy+','+p.dir;if(p.cost>(dists.get(k)??Infinity)+EPS)continue;
+ while(!expired()&&heap.size&&popped++<15000){const p=heap.pop(),k=p.ix+','+p.iy+','+p.dir;if(p.cost>(dists.get(k)??Infinity)+EPS)continue;
   if(p.ix===tx&&p.iy===ty){goal=p;break;}
   for(const [dx,dy,d] of [[-1,0,1],[1,0,1],[0,-1,2],[0,1,2]]){
    const ix=p.ix+dx,iy=p.iy+dy;if(ix<0||ix>=xs.length||iy<0||iy>=ys.length)continue;
@@ -164,7 +167,7 @@ function improve(scene,{limit=Infinity}={}){
   const mode=root.__WIU_R98_SORT__||'original';
   return mode==='long'?d(b)-d(a):mode==='short'?d(a)-d(b):mode==='topfirst'?Number(!b.source.startsWith('top'))-Number(!a.source.startsWith('top')):mode==='blockfirst'?Number(!a.source.startsWith('top'))-Number(!b.source.startsWith('top')):0;
  });
- for(const edge of priority){
+ for(const edge of priority){if(expired())break;
   const before=ptsOf(edge);if(before.length<2)continue;
   summary.total++;summary.bendsBefore+=countBends(before);
   let after=before;
@@ -215,7 +218,7 @@ function smoothCongestion(scene,{passes=2}={}){
   return indices.sort((a,b)=>Number(!!edges[a].sharedFanout)-Number(!!edges[b].sharedFanout)||b-a);
  };
  let updated=0;
- for(let pass=0;pass<passes;pass++){
+ for(let pass=0;pass<passes&&!expired();pass++){
   let moves=0;
   for(const i of candidateIndices()){
    const e=edges[i],used=foreign(i),initial=ptsOf(e),prior=overlapsWith(initial,e.net,used);
@@ -277,7 +280,7 @@ function alternateChannels(old,edge,scene,ctx,foreign,idx){
  const both=new Set(b);
  for(const x of a){if(!both.has(x))continue;const q=commit([src,point(x,src.y),point(x,dst.y),dst]);if(q)return q;}
  a=a.slice(0,40);b=b.slice(0,40);
- for(const y of ys.slice(0,180)){
+ for(const y of ys.slice(0,180)){if(expired())break;
   const av=a.filter(x=>validRun(point(x,src.y),point(x,y))),bv=b.filter(x=>validRun(point(x,dst.y),point(x,y)));
   for(const ax of av)for(const bx of bv){
    if(!validRun(point(ax,y),point(bx,y)))continue;
@@ -292,7 +295,7 @@ function swapChannels(scene,ctx){
  const edges=scene.edges,issues=SP.scan(scene,{limit:200}).issues;
  const track=(path,e)=>segs(path).map(s=>({...s,net:e.net,source:e.source,target:e.target,weight:e.weight}));
  let moves=0;
- for(const {edgeA,edgeB} of issues){const a=edges[edgeA],b=edges[edgeB];if(a.manual||b.manual)continue;
+ for(const {edgeA,edgeB} of issues){if(expired())break;const a=edges[edgeA],b=edges[edgeB];if(a.manual||b.manual)continue;
   const pa=ptsOf(a),pb=ptsOf(b),others=edges.flatMap((e,k)=>k===edgeA||k===edgeB?[]:track(ptsOf(e),e)),oi=SP.index(others);
   const pairScore=(x,y)=>routeContact(x,a,oi,scene).score+routeContact(y,b,oi,scene).score+routeContact(x,a,track(y,b),scene).score;
   const base=pairScore(pa,pb);if(!base)continue;
@@ -318,11 +321,11 @@ function swapChannels(scene,ctx){
 function repairSpacing(scene,{passes=3,maxRoutes=145}={}){
  const ctx=contextFor(scene),edges=scene.edges,allUsed=()=>edges.map(e=>segs(ptsOf(e)).map(s=>({...s,net:e.net,source:e.source,target:e.target,weight:e.weight})));
  let moves=0,routed=0;
- for(let pass=0;pass<passes;pass++){
+ for(let pass=0;pass<passes&&!expired();pass++){
   const used=allUsed(),contactCount=edges.map((e,i)=>routeContact(ptsOf(e),e,SP.index(used.flatMap((t,j)=>i===j?[]:t)),scene).count);
   const order=edges.map((e,i)=>i).filter(i=>contactCount[i]&&!edges[i].manual).sort((a,b)=>contactCount[b]-contactCount[a]||b-a).slice(0,maxRoutes);
   let changed=0;
-  for(const i of order){
+  for(const i of order){if(expired())break;
    const edge=edges[i],foreign=used.flatMap((t,j)=>i===j?[]:t),idx=SP.index(foreign),old=ptsOf(edge);
    let best=old,base=routeContact(old,edge,idx,scene),quality=base.score;
    if(!base.count)continue;

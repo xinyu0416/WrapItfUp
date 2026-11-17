@@ -1,0 +1,17 @@
+/* Keep electrical paths readable without replacing the established editors. */
+.r132-endpoint{display:grid;gap:3px;font:12px/1.4 ui-monospace,Consolas,monospace;white-space:normal;overflow-wrap:anywhere}
+.r132-instance{font-weight:600;color:#334b57}
+.r132-group{font-size:11px;color:#647581}
+.r132-group::before{content:'Group: ';font-family:system-ui,sans-serif}
+.r132-endpoint strong{font-size:13px;color:#183a41}
+.r132-review-table{min-width:1030px;width:100%;table-layout:fixed}
+.r132-review-table th:first-child{width:38px}.r132-review-table th:nth-child(2){width:23%}.r132-review-table th:nth-child(3){width:64px}.r132-review-table th:nth-child(4){width:110px}.r132-review-table th:nth-child(5){width:34%}.r132-review-table th:nth-child(6){width:130px}.r132-review-table th:last-child{width:110px}
+.r132-review-table td{vertical-align:top;padding:12px 10px;border-bottom:1px solid #dce5e6}
+.r132-review-table .r119-binding{margin-top:9px;padding-top:8px;border-top:1px dashed #dce5e6;display:flex;flex-wrap:wrap;gap:5px}
+.r132-review-table .r119-binding input{flex:1 1 180px;min-width:140px}.r132-review-table .r119-binding small{flex-basis:100%}
+.r132-destinations small,.r132-peer small{display:block;color:#566772}.r132-peer+.r132-peer{margin-top:8px;padding-top:8px;border-top:1px solid #e8eeee}
+.r132-peer code{display:block;white-space:pre-wrap;overflow-wrap:anywhere}
+.r132-net-navigation{display:flex;align-items:center;flex-wrap:wrap;gap:5px}.r132-net-navigation small{max-width:350px;overflow-wrap:anywhere}.r132-net-navigation button{min-height:30px;white-space:nowrap}
+.r132-endpoint-list{display:grid;gap:7px;max-height:60vh;overflow:auto}.r132-endpoint-list button{text-align:left;padding:12px;background:#f7faf9;border:1px solid #ccd9d6;border-radius:6px}.r132-endpoint-list small{display:block;margin-top:6px}
+.wb-canvas .r132-located{outline:3px solid #dc870b!important;outline-offset:5px;background:#fff1b9!important;z-index:15!important;box-shadow:0 0 0 9px #fff7dcbb!important}
+.wb-canvas .r132-located-block{outline:2px solid #d49431!important;outline-offset:8px}

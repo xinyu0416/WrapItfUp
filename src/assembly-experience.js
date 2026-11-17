@@ -60,7 +60,7 @@
     'graph-connect-mode':['接線模式','在 Top 選起點和終點','連接 pin pad 導線','graph'],
     'graph-table':['連線表','用表格檢查或批次設定接線','接線表 綁定 bindings 批次','graph'],
     'graph-crossing-review':['圖面檢查','定位跳線、線距、pad 與 Block 問題','幾何 跨線 弧橋 跳線 線距 間距 重疊 座標','graph'],
-    'graph-repair-jumps':['局部修復跳線與線距','在圖面檢查中定位並修復','橋 接線衝突 排線 繞線','review'],
+    'graph-repair-jumps':['修復線距與擴大空間','在圖面檢查中定位並修復','橋 接線衝突 排線 繞線','review'],
     'graph-optimize':['重新自動走線','重新計算並取代已儲存的手動轉折','重新最佳化走線 重排 重新排線 繞線','layout'],
     'graph-arrange':['整理 Block 與 Top ports','重新排列 Block 和 Top ports 的位置','整理排列 排版 模組佈局','layout'],
     'graph-wire-edit':['調整走線','拖曳或用方向鍵微調轉折點','手動 線段 走線 轉角 折點','graph'],

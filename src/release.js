@@ -1,1 +1,1 @@
-(function(root){const release={number:130,label:'Public r130'};root.WIURelease=release;if(typeof module==='object')module.exports=release;})(globalThis);
+(function(root){const release={number:132,label:'Public r132'};root.WIURelease=release;if(typeof module==='object')module.exports=release;})(globalThis);

@@ -37,7 +37,7 @@
   const practiceCoach=document.createElement('aside');practiceCoach.className='wb-practice-coach';practiceCoach.hidden=true;document.body.append(practiceCoach);
   let graphNeedsPrepare=true,lastInterfaceImpact=null;
   const graphRunner=window.WIUGraphBackground.createRunner();
-  const drawingRunner=window.WIUGraphBackground.createRunner({timeout:120000});
+  const drawingRunner=window.WIUGraphBackground.createRunner({timeout:30000});
   let graphJob=null,drawingBusy=false,viewportFrame=null;
   function graphProgress(progress){
     if(!graphJob)return;graphJob.message=progress.phase+(progress.total?' · '+progress.done+' / '+progress.total:progress.done?' · '+progress.done+' 條':'');
@@ -93,12 +93,12 @@
   }
   async function drawingTask(kind,options={}){
     if(drawingBusy){toast('圖面工作正在執行，可在視窗內取消。');return null;}
-    drawingBusy=true;pauseGraph();
+    drawingBusy=true;pauseGraph();const started=Date.now();let failure=null;
     openDialog('背景處理圖面','<p data-drawing-progress>正在計算，可以取消後繼續編輯。</p><button type="button" data-action="graph-drawing-cancel">取消計算</button>');
     const close=()=>drawingRunner.cancel('已取消圖面工作');dialog.addEventListener('close',close,{once:true});
-    try{return await drawingRunner.run({kind,project:window.WIUTopScene.withDrawingSnapshot(project),options},v=>{const el=$('[data-drawing-progress]',dialog);if(el)el.textContent=v.phase+(v.total?' · '+v.done+' / '+v.total:'')+'；可隨時取消。';});}
-    catch(e){if(e.code!=='CANCELLED')toast(e.message);return null;}
-    finally{drawingBusy=false;dialog.removeEventListener('close',close);dialog.close();}
+    try{return await drawingRunner.run({kind,project:window.WIUTopScene.withDrawingSnapshot(project),options},v=>{const el=$('[data-drawing-progress]',dialog);if(el)el.textContent=v.phase+(v.total?' · '+v.done+' / '+v.total:v.done?' · '+v.done+' 條':'')+' · '+Math.round((Date.now()-started)/1000)+' 秒；可隨時取消。';});}
+    catch(e){if(e.code!=='CANCELLED')failure=e.message;return null;}
+    finally{drawingBusy=false;dialog.removeEventListener('close',close);dialog.close();if(failure)openDialog('圖面工作未完成','<p>'+esc(failure)+'</p><p>未套用任何結果，原圖與接線資料保留。可繼續編輯、儲存或匯出 RTL。</p>');}
   }
   let graphGroupPanel=false,graphArtwork=false,graphFocus=false,focusRail=true;
   let practiceCoachExpanded=false, railOpen=true, graphZoom=1,graphPan={x:0,y:0},lastDesignTab='graph',lastDesignView='assembly',lastDesignModule='top';
@@ -264,15 +264,29 @@
   window.addEventListener('keydown',e=>{if(e.key==='Escape')closeObjectMenu();},true);
 
 
-  function graphNetDetails(){
-    const canvas=$('.wb-canvas',shell);if(!canvas)return [];
-    const elements=$$('[data-wire-net]',canvas);
-    const endpointLabel=key=>{if(key.startsWith('top::'))return 'Top.'+(project.nets.find(n=>n.id===key.slice(5))?.name||key.slice(5));const [id,port]=key.split('::');return (project.instances.find(i=>i.id===id)?.name||id)+'.'+(port||'');};
-    return [...graphNetFocus].map(name=>{
-      const list=elements.filter(g=>g.dataset.wireNet===name),net=project.nets.find(n=>n.name===name),source=[...new Set(list.map(g=>endpointLabel(g.dataset.wireSource||'')))],targets=[...new Set(list.map(g=>endpointLabel(g.dataset.wireTarget||'')))];
-      return {name,range:net?.range||'',from:source,to:targets};
-    });
+  let netNavigation=null,netReviewCache=null;
+  function netReview(){const key=JSON.stringify([project.workbook.projectId,project.modules,project.instances,project.nets,project.connections,project.assigns,project.parameters,project.defineConfig,project.workbook.diagrams]);if(netReviewCache?.key!==key)netReviewCache={key,value:window.WIUNetReview.index(project)};return netReviewCache.value;}
+  function navigationNet(){return graphNetFocus.size===1?[...graphNetFocus][0]:null;}
+  function navigationTools(){
+    const name=navigationNet();if(!name)return '<small>選取一條 net 可定位 Driver / Load</small>';
+    const n=netReview().net(name),nav=netNavigation?.name===name&&netNavigation.owner===project.workbook.projectId?netNavigation:null;
+    return '<span class="r132-net-navigation" aria-label="接線端點定位">'+[['drivers','Driver 驅動',n.drivers],['loads','Load 接收',n.loads],['bidirectional','雙向',n.bidirectional]].filter(x=>x[0]!=='bidirectional'||x[2].length).map(([kind,label,list])=>'<button type="button" data-action="net-nav-list" data-kind="'+kind+'" '+(!list.length?'disabled':'')+'>'+label+' '+list.length+'</button>').join('')+(!n.drivers.length?'<small>未找到單向 Driver</small>':n.drivers.length>1?'<small>多個 Driver，請核對切片／驅動狀態</small>':'')+(n.loads.length>1?'<button data-action="net-nav-step" data-delta="-1" aria-label="上一個 Load">← Load</button><button data-action="net-nav-step" data-delta="1" aria-label="下一個 Load">Load →</button>':'')+(nav?.key?'<small>'+esc(nav.label)+'</small>':'')+(nav?.origin?'<button data-action="net-nav-back">返回原視野</button>':'')+'</span>';
   }
+  function navigateEndpoint(kind,key){
+    const name=navigationNet();if(!name)return;
+    const rows=netReview().net(name)[kind]||[],i=rows.findIndex(e=>e.key===key),e=rows[i];if(!e)return;
+    if(e.assign){openDialog('assign 中間節點','<p>這條 net 經過運算或轉接，以下不是直接 pin-to-pin。</p><pre>'+esc(e.label)+'</pre><button data-action="net-nav-assign">查看 assign 表</button>');return;}
+    const point=window.WIUTopScene.peek(project)?.points[key],sc=$('.wb-canvas-scroll',shell);if(!point||!sc){toast('目前圖面沒有此端點，請先完成背景整理。');return;}
+    if(!netNavigation||netNavigation.name!==name||netNavigation.owner!==project.workbook.projectId)netNavigation={name,owner:project.workbook.projectId,origin:{zoom:graphZoom,pan:{...graphPan},scrollLeft:sc.scrollLeft,scrollTop:sc.scrollTop}};
+    Object.assign(netNavigation,{kind,key,index:i,label:(kind==='loads'?'Load ':kind==='drivers'?'Driver ':'雙向 ')+(i+1)+' / '+rows.length+' · '+e.instanceName+' / '+e.group+' / '+e.pin});
+    const v=window.WIUNetReview.viewAt(point,sc.clientWidth,sc.clientHeight,graphZoom);graphZoom=v.zoom;graphPan=v.pan;sc.scrollLeft=0;sc.scrollTop=0;graphReadablePending=false;graphViewportAuto=false;dialog.close();applyGraphZoom();applyGraphNetFocus();
+  }
+  function chooseEndpoint(kind){const name=navigationNet();if(!name)return;const rows=netReview().net(name)[kind]||[];if(rows.length===1)return navigateEndpoint(kind,rows[0].key);if(!rows.length)return;
+    openDialog((kind==='drivers'?'Driver':kind==='loads'?'Load':'雙向')+' · '+name,'<p>完整接線端點，包含畫面外的接腳。請選擇要定位的端點。</p><div class="r132-endpoint-list">'+rows.map(e=>'<button data-action="net-nav-go" data-kind="'+kind+'" data-id="'+esc(e.key)+'">'+window.WIUNetReview.endpointHTML(e)+'<small>'+esc(e.direction)+' · '+esc(e.range||'1 bit')+(e.via&&e.via!==name?' · '+esc(e.via):'')+'</small></button>').join('')+'</div>');
+  }
+  function stepLoad(delta){const name=navigationNet();if(!name)return;const rows=netReview().net(name).loads;if(!rows.length)return;const index=netNavigation?.name===name&&netNavigation.kind==='loads'?rows.findIndex(e=>e.key===netNavigation.key):-1;const next=index<0?(delta<0?rows.length-1:0):(index+delta+rows.length)%rows.length;navigateEndpoint('loads',rows[next].key);}
+  function returnNetView(){const nav=netNavigation;if(!nav?.origin||nav.owner!==project.workbook.projectId)return;graphZoom=nav.origin.zoom;graphPan={...nav.origin.pan};const sc=$('.wb-canvas-scroll',shell);if(sc){sc.scrollLeft=nav.origin.scrollLeft;sc.scrollTop=nav.origin.scrollTop;}graphReadablePending=false;graphViewportAuto=false;netNavigation=null;applyGraphZoom();applyGraphNetFocus();}
+  function graphNetDetails(){const review=netReview();return [...graphNetFocus].map(name=>{const n=review.net(name),label=e=>e.instanceName+' / '+e.group+' / '+e.pin+(e.assign?' ('+e.label+')':'');return {name,range:n.net?.range||'',from:n.drivers.map(label),to:n.loads.map(label),bidirectional:n.bidirectional.map(label)};});}
   function recomputeGraphNetFocus(){
     graphNetFocus.clear();
     for(const n of graphDirectNetFocus)if(project.nets.some(x=>x.name===n))graphNetFocus.add(n);
@@ -391,6 +405,9 @@
     const instanceId=graphObject?.kind==='instance'&&graphObject.projectId===project.workbook.projectId?graphObject.id:'';
     for(const b of $$('[data-graph-drag]',canvas))b.setAttribute('aria-pressed',String(b.dataset.graphDrag===instanceId));
     const instancePicker=$('#r95-instance-select',shell);if(instanceId&&instancePicker)instancePicker.value=instanceId;
+    const located=netNavigation?.owner===project.workbook.projectId&&netNavigation?.name===navigationNet()?netNavigation.key:null;
+    for(const el of $$('[data-action="wb-pin"]',canvas))el.classList.toggle('r132-located',el.dataset.id===located);
+    for(const el of $$('[data-graph-drag]',canvas))el.closest('.wb-block')?.classList.toggle('r132-located-block',!!located&&located.split('::')[0]===el.dataset.graphDrag);
     const commands=graphStart?'':graphObjectCommands(inspected);
     const status=$('[data-net-focus-status]',shell),tip=$('.r87-canvas-tip',shell);
     if(tip)tip.hidden=active||!!graphPinHint||!!commands;
@@ -398,7 +415,7 @@
       status.hidden=!active&&!graphPinHint&&!commands;
       if(active){
         const info=graphNetDetails();
-        status.innerHTML='<span class="r118-object-tools">'+commands+'</span><strong>'+(graphGroupFocus.size?'Group '+graphGroupFocus.size+' 個 · ':'')+'追蹤 '+info.length+' 條 net<\/strong><span class="r87-net-names">'+info.map(x=>'<code>'+esc(x.name+x.range)+'<\/code>').join(' ')+'<\/span>'+(graphGroupFocus.size?'<button type="button" data-action="graph-group-ports">組內接腳</button><button type="button" data-action="graph-group-batch">批次設定組內接腳</button>':'')+'<button type="button" data-graph-net-details>端點詳情<\/button><button type="button" data-graph-clear-net title="取消追蹤" aria-label="取消追蹤">×<\/button>';
+        status.innerHTML='<span class="r118-object-tools">'+commands+'</span><strong>'+(graphGroupFocus.size?'Group '+graphGroupFocus.size+' 個 · ':'')+'追蹤 '+info.length+' 條 net<\/strong><span class="r87-net-names">'+info.map(x=>'<code>'+esc(x.name+x.range)+'<\/code>').join(' ')+'<\/span>'+navigationTools()+(graphGroupFocus.size?'<button type="button" data-action="graph-group-ports">組內接腳</button><button type="button" data-action="graph-group-batch">批次設定組內接腳</button>':'')+'<button type="button" data-graph-net-details>端點詳情<\/button><button type="button" data-graph-clear-net title="取消追蹤" aria-label="取消追蹤">×<\/button>';
       }else if(commands){status.innerHTML='<span class="r118-object-tools">'+commands+'</span><button type="button" data-graph-clear-net aria-label="取消選取">×</button>';}
       else if(graphPinHint){status.innerHTML='<span class="r87-net-names">'+esc(graphPinHint)+'<\/span><button data-graph-clear-net aria-label="關閉提示">×<\/button>';}
       else status.innerHTML='';
@@ -406,13 +423,13 @@
   }
   function selectGraphNet(name,append=false,object=null){
     const exists=project.nets.some(n=>n.name===name);if(!exists)return;
-    graphObject=object;graphPinHint='';
+    if(navigationNet()!==name)netNavigation=null;graphObject=object;graphPinHint='';
     if(!append){graphDirectNetFocus.clear();graphGroupFocus.clear();}
     if(append&&graphDirectNetFocus.has(name))graphDirectNetFocus.delete(name);else graphDirectNetFocus.add(name);
     recomputeGraphNetFocus();applyGraphNetFocus();
   }
   function clearGraphNetFocus(){
-    graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();
+    graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();netNavigation=null;
     graphObject=null;graphPinHint='';applyGraphNetFocus();
   }
   async function downloadVisioWithGates(mode='native-routed'){
@@ -433,10 +450,10 @@
   async function previewGraphLayout(kind){
     if(kind==='arrange'&&(project.workbook.layoutLocks||[]).length){scopedLayoutForm();return;}
     const G=window.WIUTopScene,before=JSON.stringify(project),plan=await drawingTask('layout',{kind});if(!plan)return;if(JSON.stringify(project)!==before){toast('專案已變更，請重新預覽。');return;}
-    const title={arrange:'整理 Block 與 Top ports',repair:'局部修復跳線與線距',optimize:'重新自動走線'}[kind];
+    const title={arrange:'整理 Block 與 Top ports',repair:'修復線距與擴大空間',fine:'精細局部修復',optimize:'重新自動走線'}[kind];
     const picture=scene=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(G.svg(scene));
     const summary=scene=>{const q=scene.routeQualityR98?.summary||{};return '安全衝突 '+(q.finalInvalid||0)+' · 線距不足 '+(q.parallelSpacing?.count||0)+' · 未完成跳線 '+(scene.crossingSummary?.unresolved||0);};
-    openDialog(title+' · 變更預覽','<p>'+esc(kind==='arrange'?'重新安排 Block 與 Top ports，並整理接線。':kind==='optimize'?'重新計算全部路徑，將取代手動走線；Block 位置依目前設計保留。':'保留現有配置，修復目前接線；不修改電氣綁定。')+'</p><p>將移動 '+plan.moved+' 個 Block。套用是一筆可復原操作；取消不變更設計。</p><div class="r118-layout-compare"><figure><figcaption>目前 · '+summary(plan.before)+'</figcaption><img alt="目前排列" src="'+picture(plan.before)+'"></figure><figure><figcaption>預覽 · '+summary(plan.after)+'</figcaption><img alt="變更後排列" src="'+picture(plan.after)+'"></figure></div>','套用 '+title,()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>{project=plan.project;},'已套用 '+title+'，可一次復原。',{label:title,scope:'top'});dialog.close();});
+    openDialog(title+' · 變更預覽','<p>'+esc(kind==='arrange'?'重新安排 Block 與 Top ports，並整理接線。':kind==='fine'?'每輪約 8 秒的局部線距與轉角搜尋；完成檢查後顯示結果，可隨時取消。':kind==='optimize'?'重新計算路徑，取代手動走線；需要時擴大空間，保留鎖定 Block。':'先擴大不足的走線空間，再比較重排結果；保留手動線與鎖定 Block，不修改電氣綁定。')+'</p><p>'+esc(plan.note||'')+'</p><p>圖面尺寸：'+Math.round(plan.before.width)+' × '+Math.round(plan.before.height)+' → '+Math.round(plan.after.width)+' × '+Math.round(plan.after.height)+'</p><p>將移動 '+plan.moved+' 個 Block。套用是一筆可復原操作；取消不變更設計。</p><div class="r118-layout-compare"><figure><figcaption>目前 · '+summary(plan.before)+'</figcaption><img alt="目前排列" src="'+picture(plan.before)+'"></figure><figure><figcaption>預覽 · '+summary(plan.after)+'</figcaption><img alt="變更後排列" src="'+picture(plan.after)+'"></figure></div>',plan.unchanged?null:'套用 '+title,()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>{project=plan.project;},'已套用 '+title+'，可一次復原。',{label:title,scope:'top'});dialog.close();});
   }
   function optimizeGraphRoutes(){previewGraphLayout('optimize');}
   function repairGraphJumps(){previewGraphLayout('repair');}
@@ -457,7 +474,7 @@
       '<p><b>本張圖：<\/b>'+summary.branches+' 條可繪製分支、'+summary.bridges+' 個正交／曲線交叉跳線、'+summary.junctions+' 個接點、'+summary.overlaps+' 處異源共線、'+(summary.sharedSourceLeads||0)+' 處同源短引出、'+summary.unresolved+' 處無法安全放置跳線；自動改道 '+summary.trackMoves+' 段。<\/p>'+
       '<p>相鄰線的外緣淨距：水平至少 2 pad（28 單位），垂直至少 1 pad（14 單位）。線距不足 '+spacing+' 項，pad 或 Block 安全距離不足 '+(quality?.finalInvalid||0)+' 條。</p>'+
       (scene.autoSize?.active?'<p><b>Top 自動排版／擴張：<\/b>寬度 +'+scene.autoSize.widthAdded+'，高度 +'+scene.autoSize.heightAdded+'，重排 '+scene.autoSize.changedInstances+' 個 Block。網站及 Visio 使用同一份座標。<\/p>':'')+
-      '<p>點「定位」直接跳到交叉處，不必自己找座標；這是圖面品質警告，不代表 RTL 線斷開，也不要求先手動整理才能下載 VBS。<\/p><button type="button" data-tool-tab="check">前往設計檢查</button><button type="button" data-action="graph-visio-routed">下載目前 VBS<\/button><button type="button" data-action="graph-repair-jumps">局部修復跳線與線距<\/button>'+
+      '<p>點「定位」直接跳到交叉處，不必自己找座標；這是圖面品質警告，不代表 RTL 線斷開，也不要求先手動整理才能下載 VBS。<\/p><button type="button" data-tool-tab="check">前往設計檢查</button><button type="button" data-action="graph-visio-routed">下載目前 VBS<\/button><button type="button" data-action="graph-repair-jumps">修復線距與擴大空間<\/button>'+
       (gapRows?'<h3>平行線間距不足（前 40 組）<\/h3><div class="a-tablebox"><table class="a-table"><thead><tr><th>#<\/th><th>訊號 A / B<\/th><th>方向<\/th><th>淨距 / 需求<\/th><th>位置<\/th><\/tr><\/thead><tbody>'+gapRows+'<\/tbody><\/table><\/div>':'')+
       (rows?'<div class="a-tablebox" style="max-height:400px;overflow:auto"><table class="a-table"><thead><tr><th>#<\/th><th>狀態<\/th><th>net 名稱<\/th><th>圖面座標<\/th><\/tr><\/thead><tbody>'+rows+'<\/tbody><\/table><\/div>':'<p>未偵測到無法安全繪製的交叉或共線。<\/p>')+
       (issueList.length>150?'<p>僅列出前 150 項；所有衝突仍計入總數。<\/p>':'');
@@ -481,7 +498,7 @@
     toast('已定位 ('+Math.round(x)+', '+Math.round(y)+')；紅圈為原始檢查位置。');
   }
   function showGraphNetDetails(){
-    const lines=graphNetDetails().map(x=>'<div class="r87-net-detail"><h3><code>'+esc(x.name+x.range)+'<\/code><\/h3><p><b>起點：<\/b>'+esc(x.from.join('、')||'尚未辨識')+'<\/p><p><b>終點：<\/b>'+esc(x.to.join('、')||'尚未辨識')+'<\/p><\/div>').join('');
+    const lines=graphNetDetails().map(x=>'<div class="r87-net-detail"><h3><code>'+esc(x.name+x.range)+'<\/code><\/h3><p><b>起點：<\/b>'+esc(x.from.join('、')||'尚未辨識')+'<\/p><p><b>終點：<\/b>'+esc(x.to.join('、')||'尚未辨識')+'<\/p>'+(x.bidirectional.length?'<p><b>雙向：</b>'+esc(x.bidirectional.join('、'))+'</p>':'')+'<\/div>').join('');
     openDialog('目前追蹤的 net',lines||'<p>尚未選取連線。<\/p>');
   }
   function beginGraphLabelEdit(label){
@@ -888,7 +905,7 @@
   function toggleIssueQueue(force){issueQueueOpen=typeof force==='boolean'?force:!issueQueueOpen;refreshIssueQueue();return issueQueueOpen;}
   function locateQueuedIssue(delta=0){const list=orderedIssues();if(!list.length){refreshIssueQueue();return;}issueQueueIndex=Math.max(0,Math.min(list.length-1,issueQueueIndex+delta));const issue=list[issueQueueIndex];issueQueueKey=HF.issueKey(issue);issueQueueOpen=true;actions['issue-locate']({dataset:{ref:JSON.stringify(issue.ref),issueKey:issueQueueKey}});refreshIssueQueue();}
   issueQueue.addEventListener('click',e=>safe(()=>{const action=e.target.closest('[data-issue-queue]')?.dataset.issueQueue;if(action==='close')toggleIssueQueue(false);else if(action==='all')go('check');else if(action)locateQueuedIssue(action==='prev'?-1:action==='next'?1:0);}));
-  function issueList(list){return list.length?'<div class="a-issues">'+list.map(i=>'<div class="a-issue">'+badge(i.severity==='error'?'需修正':'請留意',i.severity==='error'?'error':'warning')+'<div class="a-issue-copy"><strong>'+esc(issueHelp[i.code]||i.message)+'<\/strong>'+(issueHelp[i.code]?'<small>'+esc(i.message)+'</small>':'')+'<\/div>'+(i.ref?'<button data-action="issue-locate" title="'+esc(issueHelp[i.code]||'定位問題欄位')+'" data-issue-key="'+esc(HF.issueKey(i))+'" data-ref="'+esc(JSON.stringify(i.ref))+'">前往修正<\/button>':'')+'<\/div>').join('')+'<\/div>':'<div class="a-note">✓ 此步驟沒有發現問題。<\/div>';}
+  function issueList(list){return window.WIUIssueReview.render(project,list,{help:issueHelp,issueKey:HF.issueKey});}
   function refreshMeta(){
     rowIssues=issues();inlineTop();
     refreshSaveStatus();
@@ -962,7 +979,7 @@
 
     const errors=all.filter(i=>i.severity==='error'),warnings=all.filter(i=>i.severity!=='error');
     if(!project.instances.length)return nav+E.heading('','先放入要組裝的模組','目前還沒有 instance；建立設計後再檢查接線。')+'<button class="a-primary" data-tab="modules">前往放入模組 →<\/button>';
-    return nav+E.heading('Top 接線結構',errors.length?'還有 '+errors.length+' 項需要處理':'Top 接線結構檢查通過',errors.length?'點選「前往修正」，直接回到相關接腳或宣告。':'現在可以選擇要下載的成果。')+
+    return nav+E.heading('Top 接線結構',errors.length?'還有 '+errors.length+' 項需要處理':'Top 接線結構檢查通過',errors.length?'下表直接列出每個 instance、訊號、目前設定與問題原因；需要編輯時再按「前往修正」。':'現在可以選擇要下載的成果。')+
       '<div class="a-actions r69-review-next"><button '+(errors.length?'data-action="review-first-error"':'data-tab="bundle"')+' class="a-primary">'+(errors.length?'依序修正問題':'前往交付')+'<\/button><\/div><div class="ux-review-summary"><span>'+project.instances.length+' 個 instances<\/span><span>'+project.nets.filter(n=>n.direction!=='wire').length+' 個對外接腳<\/span><span>'+project.nets.filter(n=>n.direction==='wire').length+' 條內部線<\/span><\/div>'+issueList(errors)+(warnings.length?'<h3>'+warnings.length+' 項警告 · 可繼續操作<\/h3>'+issueList(warnings):'')+
       '<p class="a-hint">此處檢查宣告、位寬與驅動等結構問題，尚未執行 RTL 編譯器或公司 gen_top。<\/p>';
   }
@@ -1016,8 +1033,10 @@
   }
   function renderConnectionTable(rows){
     if(!project.instances.length)return emptyStart();
-    const shown=rows.filter(r=>(!graphTableOrigin?.pinKey||r.key===graphTableOrigin.pinKey)&&(!instanceFilter||r.instance===instanceFilter)&&(!onlyUnbound||r.expr==null)&&(!filter||(r.instanceName+' '+r.port.name+' '+(r.expr||'')).toLowerCase().includes(filter.toLowerCase())));
-    return connectionScopeSummary(rows,shown)+'<p class="a-hint">不用的 pin 請選「刻意不接」，org 會明寫 conn ""；「未設定」仍需處理。可勾選多個接腳批次處理。<\/p><div class="a-toolbar"><input id="a-filter" placeholder="搜尋 instance、pin 或 net…" value="'+esc(filter)+'" aria-label="搜尋連線"><select id="a-instance-filter" aria-label="依 instance 篩選"><option value="">全部 instances<\/option>'+project.instances.map(i=>'<option value="'+esc(i.id)+'" '+(i.id===instanceFilter?'selected':'')+'>'+esc(i.name)+'<\/option>').join('')+'<\/select><label><input type="checkbox" id="a-unbound" '+(onlyUnbound?'checked':'')+'> 只看未設定<\/label><button data-action="clear-filters">清除篩選<\/button><\/div><div class="a-toolbar r69-batch"><span>'+selected.size+' 個已選取<\/span><button data-action="batch-net" '+(!selected.size?'disabled':'')+'>接到 net／新建 net<\/button><button data-action="batch-slices" '+(!selected.size?'disabled':'')+'>切片分配<\/button><button data-action="batch-expose" '+(!selected.size?'disabled':'')+'>提升為 Top ports<\/button><button data-action="batch-tie" '+(!selected.size?'disabled':'')+'>常數<\/button><button data-action="batch-open" '+(!selected.size?'disabled':'')+'>刻意不接 NC<\/button><button data-action="batch-unset" '+(!selected.size?'disabled':'')+'>清除設定<\/button><\/div><div class="a-tablebox"><table class="a-table"><thead><tr><th><input type="checkbox" id="a-select-all" aria-label="選取目前顯示 pins" '+(shown.length&&shown.every(r=>selected.has(r.key))?'checked':'')+'><\/th><th>INSTANCE / PIN<\/th><th>方向 / 位寬<\/th><th>連到<\/th><th>狀態<\/th><th>操作<\/th><\/tr><\/thead><tbody>'+shown.map(r=>'<tr data-row-key="'+esc(r.key)+'"><td><input type="checkbox" data-pin-select="'+esc(r.key)+'" '+(selected.has(r.key)?'checked':'')+' aria-label="選取 '+esc(r.instanceName+'.'+r.port.name)+'"><\/td><td><span class="a-pin a-mono">'+esc(r.port.name)+'<\/span><span class="a-pin-sub">'+esc(r.instanceName)+'<\/span><\/td><td>'+badge(r.port.direction.toUpperCase())+' <span class="a-mono">'+esc(pinRange(r))+'<\/span><\/td><td><div class="r119-binding"><select class="r118-binding-mode" data-binding-mode="'+esc(r.key)+'" aria-label="'+esc(r.instanceName+'.'+r.port.name)+' 綁定狀態">'+[['unset','未設定'],['net','接線／運算式'],...(r.port.direction==='output'?[]:[['constant','常數']]),['open','刻意不接']].map(([value,label])=>'<option value="'+value+'" '+(HF.bindingKind(r.expr)===value?'selected':'')+'>'+label+'</option>').join('')+'</select><input class="a-expr" data-connection="'+esc(r.key)+'" value="'+esc(r.expr??'')+'" placeholder="'+(r.expr===''?'刻意不接：.pin()':'輸入 net／運算式；空白＝未設定')+'" list="a-net-list" spellcheck="false" aria-label="'+esc(r.instanceName+'.'+r.port.name)+' 連線"><small data-r118-edit-status role="status">'+''+'</small></div><\/td><td>'+pinStatus(r)+'<\/td><td><button data-action="pin-connect" data-id="'+esc(r.key)+'">設定接線…<\/button><\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>'+(!shown.length?'<div class="a-note">'+(rows.length?'沒有符合篩選的 pins。':'此 instance 沒有可用的接腳；請先核對子模組 RTL。')+' <button data-action="clear-filters">顯示全部<\/button><\/div>':'')+'<datalist id="a-net-list">'+project.nets.map(n=>'<option value="'+esc(n.name)+'">'+esc(n.direction+' '+n.range)+'<\/option>').join('')+'<\/datalist><p class="a-hint">顯示 '+shown.length+' / '+rows.length+' pins。清空輸入並套用會回到「未設定」；選擇「刻意不接」才會輸出 .pin()。<\/p>';
+    const review=netReview(),NR=window.WIUNetReview;
+    const searchable=r=>{const e=review.byKey.get(r.key);return [r.instanceName,e?.group,r.port.name,r.expr,...review.peers(r.key).map(p=>p.instanceName+' '+p.group+' '+p.pin)].join(' ').toLowerCase();};
+    const shown=rows.filter(r=>(!graphTableOrigin?.pinKey||r.key===graphTableOrigin.pinKey)&&(!instanceFilter||r.instance===instanceFilter)&&(!onlyUnbound||r.expr==null)&&(!filter||searchable(r).includes(filter.toLowerCase())));
+    return connectionScopeSummary(rows,shown)+'<p class="a-hint">每列依 Instance → Group → Pin 對照兩端；Group「—」表示未分組。目的欄列出同一 net 的驅動／接收端；assign 與切片保留運算式。不用的 pin 請選「刻意不接」，org 會明寫 conn ""；「未設定」仍需處理。可勾選多個接腳批次處理。<\/p><div class="a-toolbar"><input id="a-filter" placeholder="搜尋 instance、group、pin 或目的端…" value="'+esc(filter)+'" aria-label="搜尋連線"><select id="a-instance-filter" aria-label="依 instance 篩選"><option value="">全部 instances<\/option>'+project.instances.map(i=>'<option value="'+esc(i.id)+'" '+(i.id===instanceFilter?'selected':'')+'>'+esc(i.name)+'<\/option>').join('')+'<\/select><label><input type="checkbox" id="a-unbound" '+(onlyUnbound?'checked':'')+'> 只看未設定<\/label><button data-action="clear-filters">清除篩選<\/button><\/div><div class="a-toolbar r69-batch"><span>'+selected.size+' 個已選取<\/span><button data-action="batch-net" '+(!selected.size?'disabled':'')+'>接到 net／新建 net<\/button><button data-action="batch-slices" '+(!selected.size?'disabled':'')+'>切片分配<\/button><button data-action="batch-expose" '+(!selected.size?'disabled':'')+'>提升為 Top ports<\/button><button data-action="batch-tie" '+(!selected.size?'disabled':'')+'>常數<\/button><button data-action="batch-open" '+(!selected.size?'disabled':'')+'>刻意不接 NC<\/button><button data-action="batch-unset" '+(!selected.size?'disabled':'')+'>清除設定<\/button><\/div><div class="a-tablebox"><table class="a-table r132-review-table"><thead><tr><th><input type="checkbox" id="a-select-all" aria-label="選取目前顯示 pins" '+(shown.length&&shown.every(r=>selected.has(r.key))?'checked':'')+'><\/th><th>Instance / Group / Pin<\/th><th>方向<\/th><th>位寬<\/th><th>連到 Instance / Group / Pin<\/th><th>狀態<\/th><th>操作<\/th><\/tr><\/thead><tbody>'+shown.map(r=>'<tr data-row-key="'+esc(r.key)+'"><td><input type="checkbox" data-pin-select="'+esc(r.key)+'" '+(selected.has(r.key)?'checked':'')+' aria-label="選取 '+esc(r.instanceName+'.'+r.port.name)+'"><\/td><td>'+NR.endpointHTML(review.byKey.get(r.key))+'<\/td><td>'+badge(r.port.direction.toUpperCase())+'<\/td><td><span class="a-mono">'+esc(pinRange(r))+'<\/span><\/td><td><div class="r132-destinations">'+NR.destinationHTML(review.byKey.get(r.key),review.peers(r.key))+'</div><div class="r119-binding"><select class="r118-binding-mode" data-binding-mode="'+esc(r.key)+'" aria-label="'+esc(r.instanceName+'.'+r.port.name)+' 綁定狀態">'+[['unset','未設定'],['net','接線／運算式'],...(r.port.direction==='output'?[]:[['constant','常數']]),['open','刻意不接']].map(([value,label])=>'<option value="'+value+'" '+(HF.bindingKind(r.expr)===value?'selected':'')+'>'+label+'</option>').join('')+'</select><input class="a-expr" data-connection="'+esc(r.key)+'" value="'+esc(r.expr??'')+'" placeholder="'+(r.expr===''?'刻意不接：.pin()':'輸入 net／運算式；空白＝未設定')+'" list="a-net-list" spellcheck="false" aria-label="'+esc(r.instanceName+'.'+r.port.name)+' 連線"><small data-r118-edit-status role="status">'+''+'</small></div><\/td><td>'+pinStatus(r)+'<\/td><td><button data-action="pin-connect" data-id="'+esc(r.key)+'">設定接線…<\/button><\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>'+(!shown.length?'<div class="a-note">'+(rows.length?'沒有符合篩選的 pins。':'此 instance 沒有可用的接腳；請先核對子模組 RTL。')+' <button data-action="clear-filters">顯示全部<\/button><\/div>':'')+'<datalist id="a-net-list">'+project.nets.map(n=>'<option value="'+esc(n.name)+'">'+esc(n.direction+' '+n.range)+'<\/option>').join('')+'<\/datalist><p class="a-hint">顯示 '+shown.length+' / '+rows.length+' pins。清空輸入並套用會回到「未設定」；選擇「刻意不接」才會輸出 .pin()。<\/p>';
   }
   function topContext(){const raw=C.projectView(project).parameters||[],defs=Array.isArray(raw)?raw:Object.entries(raw).map(([name,value])=>({name,value:String(value)}));return C.resolveParameters({parameters:defs},{}).context;}
   function pinRange(row){try{const pv=C.projectView(project),inst=pv.instances.find(i=>i.id===row.instance),m=pv.modules.find(m=>m.name===inst.module),ctx=C.resolveParameters(m,inst.parameters,topContext()).context;const r=C.parseRange(C.expandDefines(row.port.range,project),ctx);return (row.port.range||'1 bit')+(r.width>1?' · '+r.width+' bits':'');}catch{return row.port.range||'1 bit';}}
@@ -1201,6 +1220,11 @@
   function showRecentDownload(){if(!recentDownload){toast('目前尚無已產生的下載。');return;}const f=recentDownload;openDialog('最近一次匯出','<p><b>'+esc(f.name)+'</b> · '+f.bytes+' bytes</p><p>已送出下載，請在裝置下載列表確認。重試會使用同一次產生的內容。</p><div class="a-actions"><button id="r119-download-again">再次下載同一檔案</button>'+(f.text!=null?'<button id="r119-download-preview">查看／複製完整內容</button>':'')+'</div>');$('#r119-download-again',dialog).onclick=()=>download(f.name,f.data,f.type);if(f.text!=null)$('#r119-download-preview',dialog).onclick=()=>flowUI.showFiles([{path:f.name,text:f.text,description:f.name.endsWith('.vbs')?'文字備援為 UTF-8；原 VBS 下載保留 UTF-16LE 編碼。':'最近一次匯出的完整內容'}]);}
 
   const actions={
+    'net-nav-list':b=>chooseEndpoint(b.dataset.kind),
+    'net-nav-go':b=>navigateEndpoint(b.dataset.kind,b.dataset.id),
+    'net-nav-step':b=>stepLoad(Number(b.dataset.delta)),
+    'net-nav-back':returnNetView,
+    'net-nav-assign':()=>{dialog.close();go('assigns');},
     'paste-connections':()=>pasteConnections(), 'group-match':groupMatchForm,'source-preview':b=>sourcePreview(b.dataset.id),'clear-hidden-selection':()=>{const visible=new Set($$('[data-pin-select]',shell).map(el=>el.dataset.pinSelect));selected=new Set([...selected].filter(k=>visible.has(k)));render();},
     'check-scope':b=>{checkScope=b.dataset.id;go('check');},'layout-scope':scopedLayoutForm,'layout-lock':toggleLayoutLock,'config-profiles':configProfiles,'recent-download':showRecentDownload,
     'net-candidates':b=>candidateForm(b.dataset.id),
@@ -1235,7 +1259,7 @@
     'graph-arrange':()=>previewGraphLayout('arrange'),
     'graph-groups':()=>{graphGroupPanel=!graphGroupPanel;render();},
     'graph-route':()=>commit(()=>{project.workbook.topStyle={...window.WIUDiagramStyle.settings(project),route:window.WIUDiagramStyle.settings(project).route==='curve'?'orthogonal':'curve'};}),
-    'graph-repair-jumps':()=>repairGraphJumps(),
+    'graph-repair-jumps':()=>repairGraphJumps(),'graph-repair-fine':()=>previewGraphLayout('fine'),
     'graph-optimize':optimizeGraphRoutes,
     'graph-wire-edit':()=>commit(()=>{const st=window.WIUDiagramStyle.settings(project);project.workbook.topStyle={...st,editWireRoutes:!st.editWireRoutes};}),
     'graph-labels':()=>commit(()=>{const st=window.WIUDiagramStyle.settings(project);project.workbook.topStyle={...st,showWireNames:!st.showWireNames};}),

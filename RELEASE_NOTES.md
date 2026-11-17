@@ -1,5 +1,29 @@
 # WrapItfUp release notes / 版本紀錄
 
+## Public r132 — 2026-11-17
+
+Top 外側為不同訊號保留獨立線道並擴大空間；修正把框外文字區算成可走線範圍，以及大型重新走線過久的問題。加入依完整接線資料定位的 Driver／Load、多 Load 輪巡、返回原視野；接線表改成兩端 Instance / Group / Pin 對照。
+
+Separate Top boundary lanes and physical frame bounds replace shared escape columns. Driver/Load navigation uses the full electrical endpoint index, including offscreen loads. The connection table displays both endpoint paths while retaining inline and batch editing.
+
+89 automated tests, release build and public-content audit passed. Full manual UI and large-project output parity remain pending; this is the same r132 application delivered for early review. Interior routing conflicts are not cleared or hidden. [Verification status](docs/VERIFICATION-r132.md) · [r130 → r132 update](docs/UPDATE-r130-r132.md).
+
+## Public r131 — 2026-11-17
+
+### 繁體中文
+
+檢查頁直接列出 instance、訊號／接腳、目前設定與原因，不再需要逐項進入編輯器才辨認問題。沿用同一份驗證結果，未接線與刻意不接 NC 仍明確區分。
+
+修正手動修復排除了空間擴張的條件，以及把所有已保存位置當成鎖定的問題。「修復線距與擴大空間」先比較原圖、擴張及重排結果，預覽圖面尺寸與衝突數；保護鎖定方塊及水平長條，只接受各類衝突都不增加的結果。套用可一次復原／重做，沒有改善時保持原圖。原精細局部修復保留為較慢的獨立入口。
+
+實際七 instance 設計在約 5.8 秒內完成比較，線距不足 8,858 → 6,797，共線 7,493 → 5,957，安全衝突維持 0；既有 46 項未接線及 RTL 預覽保持一致。剩餘擁擠仍多，不能視為排線全部通過。大型圖初次開啟維持快速路徑，尚未完全達成歷史要求的初次自動精排。
+
+83 項測試、離線建置與公開內容稽核通過。相關舊需求、實際瀏覽器驗證及未測環境見 [r131 驗證紀錄](docs/VERIFICATION-r131.md)。
+
+### English
+
+Validation now presents instance, pin, current binding and reason directly. Explicit repair restores space expansion previously excluded by the force flag and distinguishes saved positions from real layout locks. It compares expanded/rerouted candidates, accepts no increase in any diagnostic category, protects rigid control bars and locks, previews dimensions/counts, and commits one undoable operation. Slow local repair remains available separately. A supplied dense design improved spacing conflicts from 8,858 to 6,797 in 5.8 seconds with identical electrical data and RTL preview; unresolved congestion remains. All 83 tests and release builds pass. See the verification report for retained features, the incomplete automatic-first-pass goal, and external tools not run.
+
 ## Public r130 — 2026-11-17
 
 ### 繁體中文
