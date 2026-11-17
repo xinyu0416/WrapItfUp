@@ -1,8 +1,8 @@
 # WrapItfUp
 
-**Public r126 · Module interfaces → Top wiring → RTL and diagram handoff**
+**Public r130 · Module interfaces → Top wiring → RTL and diagram handoff**
 
-[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r126.md)
+[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r130.md)
 
 WrapItfUp 把子模組介面、Top 實例接線、RTL 與圖面放在同一份設計中。先定義或匯入模組，放入實例，完成接線，再帶走可繼續編輯的專案與交付檔案。
 
@@ -18,6 +18,21 @@ This repository contains the maintainable application source, public examples, r
 4. 修改訊號、位寬、方向、群組和參數，再到 Top 接線頁完成連接並查看檢查結果。
 5. 儲存 `.wiu.json` 專案；由「產生 RTL／gen_top」下載 RTL、VBS 或 Linux 工作包。
 6. 文字傳送時依序執行 `bash`、接收器、資料批次、`CHECK`，每次貼上後按 Enter。貼回終端回報核對檔案數與 SHA-256，再於 Linux 執行產生與驗證。網站檢查不代表 Linux 已執行。
+
+### r130 大型接線圖
+
+大型圖面先顯示快速預覽，在本機背景完成有上限的避障搜尋及全圖檢查；精細線距／轉角修復由「排列與走線」按需啟動。畫面只建立視窗附近的接腳、文字與操作區；縮到 35% 以下顯示總覽，放大還原編輯細節。搜尋仍可定位畫面外訊號。這些顯示取捨不刪除設計資料或匯出內容。
+
+實際大型設計的背景計算由 r129 的 30 秒逾時改善為約 2.3–2.9 秒；數字是同一測試環境的量測，不是所有電腦的保證。新增未使用子模組沿用 Top 圖面快取。剩餘走線衝突照常列出，不視為通過。完整數據、資料比對與限制見驗證紀錄。
+
+### r128 的編輯與底部控制模組
+
+- 點圖上的訊號名稱、位寬、註解直接編輯。Enter 到下一列，Tab 到下一欄，Shift 反向，Esc 取消。縮小圖面後，作用中的輸入框仍保留可讀字級。
+- 工具列「多選」開啟後逐項點選，縮放與平移保留選取；按「清除選取」取消。要輸入文字時關閉多選。
+- 建立副本依名稱最末端數字遞增，例如 `data_p1 → data_p2`、`lane009 → lane010`，跳過已有名稱。
+- Top 圖點 wire 文字改名，未輸入位寬時保留原位寬；Ctrl 點選用於追蹤。
+- 在 Top 點選 instance 標題，選「水平長條」，會將該 instance 放到底部並延伸至其他 blocks 的寬度。依連接對象分區，名稱水平顯示；可逐區收合。點 pin 名稱可選「移到上緣／下緣」。這些設定只屬於該 instance，存入專案且支援復原。
+- 可開啟 [ControlBar 通用範例](examples/ControlBar.wiu.json) 試用一個控制模組連接四個通道模組。
 
 ### 主要能力
 
@@ -37,7 +52,7 @@ This repository contains the maintainable application source, public examples, r
 
 ### 名稱與檔案用途
 
-產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r126-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
+產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r130-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
 
 | 檔案 | 用途 |
 | --- | --- |
@@ -61,7 +76,7 @@ This repository contains the maintainable application source, public examples, r
 | 下一個／上一個搜尋結果 | F3／Shift+F3 | F3／Shift+F3 |
 | 圖面展示／重新適應畫面 | F5 | F5，依鍵盤設定可能需 Fn |
 
-輸入欄位內的文字編輯與整份專案的歷史有不同作用範圍；先完成或取消當前文字編輯，再進行設計復原。
+輸入欄位內優先復原尚未套用的文字；欄位已乾淨且沒有文字歷史時，Ctrl+Z／重做快捷鍵會繼續操作目前模組／專案歷史。尚未修正的錯誤草稿會阻擋儲存並定位欄位。
 
 ### 公開版邊界
 
@@ -81,6 +96,18 @@ The module list owns definitions; the Top view owns instances and wiring. Editab
 
 For Linux text transfer, follow the separate `bash`, receiver, data batches and `CHECK` steps, pressing Enter after each paste. Clipboard success is separate from receiver confirmation, file hashes, generation, compilation and simulation. Orphan Empty settings can be removed or reassigned in the UI. Top-pin deletion previews related connections, assignments and Empty settings and commits one undoable transaction.
 
+### r130 large wiring diagrams
+
+Dense diagrams use bounded local background routing and full final checks. Expensive spacing/corner repair is an explicit operation under the layout menu. The screen renders nearby geometry and hit targets; below 35% zoom, overview mode omits unreadable pin/name controls and restores them when zoomed in. Offscreen search uses full-scene coordinates. Project data and exports remain complete.
+
+A supplied large design improved from r129's 30-second background timeout to 2.3–2.9 seconds in the measured environment. These are measurements, not hardware-independent guarantees. Unused module creation reuses Top geometry. Unresolved drawing conflicts remain visible; completion is not a geometry or RTL pass.
+
+### r128 editing and horizontal control blocks
+
+Click names, widths, comments or wire labels to edit in place. Enter moves down, Tab moves across, Shift reverses, and Escape cancels. Clean fields allow repeated project undo/redo after local text history is exhausted. Persistent multi-select survives pan/zoom. Duplicate names increment their final digit run, including `_p1` and padded numbers. Wire-only renames preserve the previous range.
+
+Select an instance header in Top, then choose the horizontal-bar layout. Pins are grouped by connected instance, with horizontal labels and independent disclosure controls. Select a pin label to place it on the upper or lower edge. Width, pin sides, position and disclosure state are saved as presentation metadata, with undo; electrical definitions and exports stay unchanged. The generic [ControlBar example](examples/ControlBar.wiu.json) contains one controller and four channel instances.
+
 ### Capabilities and formats
 
 - Define interfaces with signals, groups, directions, widths, and parameters; import supported RTL.
@@ -95,7 +122,7 @@ Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z redoes, Ctrl+Y also redoes on Windows/Linux.
 
 The public edition excludes internal manuals, original external-tool code, internal teaching projects, private verification records, and proprietary stencils. The bundled example is generic. Design processing runs in the browser, with no application design-upload endpoint or analytics; normal hosting requests still reach the hosting provider.
 
-External gen_top/gen_empty tools are separate user-provided dependencies. Existing org directive syntax remains intact. Exporting compatible files does not establish external-tool execution, successful RTL simulation, or functional equivalence. Visio automation requires a supported Windows/Visio environment. See the [verification report](docs/VERIFICATION-r126.md) for what this release actually checks.
+External gen_top/gen_empty tools are separate user-provided dependencies. Existing org directive syntax remains intact. Exporting compatible files does not establish external-tool execution, successful RTL simulation, or functional equivalence. Visio automation requires a supported Windows/Visio environment. See the [verification report](docs/VERIFICATION-r130.md) for what this release actually checks.
 
 ## Repository / 專案結構
 
@@ -133,7 +160,7 @@ npm run build:offline
 npm run release:check
 ```
 
-`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r126-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r126-offline` artifact from a successful Actions run while it remains available.
+`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r130-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r130-offline` artifact from a successful Actions run while it remains available.
 
 ### GitHub Pages
 

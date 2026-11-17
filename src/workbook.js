@@ -161,6 +161,7 @@ function removeInstanceWithLayout(project,id){
  const owns=key=>String(key||'').startsWith(id+'::');
  const clearRoutes=routes=>{for(const key of Object.keys(routes||{})){const parts=key.split('|');if(parts.slice(0,2).some(owns)||removedNets.has(parts[2]))delete routes[key];}};
  if(w.graphPositions)delete w.graphPositions[id];
+ if(w.instanceLayouts)delete w.instanceLayouts[id];
  clearRoutes(w.wireRoutes);
  if(previous){
   const frozen=clone(previous);w.graphAutoR99=frozen;

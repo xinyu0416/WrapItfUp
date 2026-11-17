@@ -9,7 +9,7 @@
   let connectionView='cards', focusedPin='', lessonTask='', helpQuery='', lastPanel='', priorWorkTab='setup', rtlOpen=false;
   let past=[],future=[],saved='', draft=null, saveTimer, toastTimer, modalAction=null, currentView='assembly', quietEdit=false;
   let dialogOpener=null, searchTimer, downloadState={},topEditBefore=null,exportSnapshot='',focusTaskAfterClose=false;
-  const saveRecords=new Map();let pendingField=null,issueQueueOpen=false,issueQueueKey='',issueQueueIndex=0;
+  const saveRecords=new Map(),fieldDrafts=new Map();let pendingField=null,issueQueueOpen=false,issueQueueKey='',issueQueueIndex=0;
   const HF=window.WIUHistoryFlow,R119=window.WIUWorkflowR119;
   const intakeDrafts=new Map();let railQuery='',railUsage='all',checkScope='top',lastHistoryEffect=null;
   const UX=window.WIUInteractionR124;
@@ -36,6 +36,70 @@
   const coach=document.createElement('aside');coach.className='wb-tour';coach.hidden=true;document.body.append(coach);
   const practiceCoach=document.createElement('aside');practiceCoach.className='wb-practice-coach';practiceCoach.hidden=true;document.body.append(practiceCoach);
   let graphNeedsPrepare=true,lastInterfaceImpact=null;
+  const graphRunner=window.WIUGraphBackground.createRunner();
+  const drawingRunner=window.WIUGraphBackground.createRunner({timeout:120000});
+  let graphJob=null,drawingBusy=false,viewportFrame=null;
+  function graphProgress(progress){
+    if(!graphJob)return;graphJob.message=progress.phase+(progress.total?' · '+progress.done+' / '+progress.total:progress.done?' · '+progress.done+' 條':'');
+    const el=$('[data-graph-background-message]',shell);if(el)el.textContent=graphJob.message;
+  }
+  function pauseGraph(reason='user'){if(graphJob?.status==='running'){graphJob.reason=reason;graphJob.status='paused';graphJob.message='背景整理已暫停；可繼續編輯、儲存或匯出 RTL。';}graphRunner.cancel();}
+  function backgroundScene(){
+    const S=window.WIUTopScene,key=S.sceneKey(project);
+    let scene=S.peek(project);if(!scene)scene=S.create(project,{fast:true});
+    if(!scene.previewOnly){if(graphJob?.key!==key)graphRunner.cancel();return scene;}
+    if(graphJob?.status==='paused'&&graphJob.reason==='navigation')graphJob=null;
+    if(graphJob?.key!==key){
+      graphRunner.cancel();const job=graphJob={key,status:'running',message:'快速接線預覽 · 正在背景整理'};
+      graphRunner.run({kind:'route',project,options:{prepare:graphNeedsPrepare}},graphProgress).then(result=>{
+        if(graphJob!==job||job.status!=='running'||S.sceneKey(project)!==key)return;
+        // Derived geometry stays outside the undoable document. Save/export
+        // attach a snapshot to a copy, so late results cannot break Undo.
+        S.prime(project,result.scene);graphNeedsPrepare=false;job.status='done';stash();
+        if(currentView==='assembly'&&tab==='graph')render();
+      }).catch(error=>{
+        if(graphJob!==job||job.status==='paused'||error.code==='CANCELLED')return;
+        job.status='paused';job.message=error.message+'（畫面仍為快速預覽，尚未完成圖面檢查）';
+        if(currentView==='assembly'&&tab==='graph')render();
+      });
+    }
+    return scene;
+  }
+  function graphWindow(scene,padding=180){
+    if(Object.keys(scene.points).length<400)return null;
+    const sc=$('.wb-canvas-scroll',shell),width=sc?.clientWidth||Math.max(400,window.innerWidth-270),height=sc?.clientHeight||Math.max(300,window.innerHeight-220);
+    const zoom=graphReadablePending?Math.max(.08,Math.min(1,width/scene.width,height/scene.height)):graphZoom;
+    return window.WIUSceneViewport.windowRect(scene,width,height,zoom,graphReadablePending?{x:0,y:0}:graphPan,padding);
+  }
+  function scheduleGraphViewport(){
+    if(viewportFrame)return;
+    viewportFrame=requestAnimationFrame(()=>{viewportFrame=null;
+      if(currentView!=='assembly'||tab!=='graph'||graphDrag||topPortDrag)return;
+      const canvas=$('.wb-canvas',shell),scene=window.WIUTopScene.peek(project);if(!canvas||!scene)return;
+      const view=graphWindow(scene,0);if(!view)return;
+      const prior=JSON.parse(canvas.dataset.renderWindow||'null');if(prior?.overview===view.overview&&window.WIUSceneViewport.contains(prior,view))return;
+      const active=document.activeElement;if(active?.matches('input:not([readonly]),textarea')&&canvas.contains(active))return;
+      window.WIUInteractionR128.paint('graph-viewport',()=>{
+        if(!canvas.isConnected)return;
+        const viewport=graphWindow(scene),drafts=[...fieldDrafts.values()].filter(d=>d.element.dataset.wireName).map(d=>({...d,value:d.element.value,invalid:d.element.getAttribute('aria-invalid'),readonly:d.element.readOnly}));
+        canvas.innerHTML=V.drawing(project,graphStart,{scene,viewport,connectMode:graphConnectMode,keepNets:new Set(drafts.map(d=>d.element.dataset.wireName))});canvas.dataset.renderWindow=JSON.stringify(viewport);
+        for(const d of drafts){const next=$$('input[data-wire-name]',canvas).find(el=>window.WIUInteractionR128.key(el)===d.domKey);if(next){next.value=d.value;next.readOnly=d.readonly;if(d.invalid)next.setAttribute('aria-invalid',d.invalid);const saved=fieldDrafts.get(d.key);if(saved)saved.element=next;}}
+        applyGraphNetFocus();if(graphFindVisible())refreshGraphFind();
+      });
+    });
+  }
+  function backgroundStatus(scene){if(!scene.previewOnly)return scene.boundedRouting?'<div class="r129-background"><span>大型圖面：快速避障與全圖檢查已完成。剩餘衝突見下方提醒；需要時再從「排列與走線」精細修復。</span></div>':'';
+    return '<div class="r129-background" role="status"><span data-graph-background-message>'+esc(graphJob?.message||'快速接線預覽')+'</span><small>線路為暫時路徑，交叉／避障尚未確認；實際接線與 RTL 不受影響。</small><button data-action="graph-background-toggle">'+(graphJob?.status==='running'?'暫停整理':'重新整理')+'</button></div>';
+  }
+  async function drawingTask(kind,options={}){
+    if(drawingBusy){toast('圖面工作正在執行，可在視窗內取消。');return null;}
+    drawingBusy=true;pauseGraph();
+    openDialog('背景處理圖面','<p data-drawing-progress>正在計算，可以取消後繼續編輯。</p><button type="button" data-action="graph-drawing-cancel">取消計算</button>');
+    const close=()=>drawingRunner.cancel('已取消圖面工作');dialog.addEventListener('close',close,{once:true});
+    try{return await drawingRunner.run({kind,project:window.WIUTopScene.withDrawingSnapshot(project),options},v=>{const el=$('[data-drawing-progress]',dialog);if(el)el.textContent=v.phase+(v.total?' · '+v.done+' / '+v.total:'')+'；可隨時取消。';});}
+    catch(e){if(e.code!=='CANCELLED')toast(e.message);return null;}
+    finally{drawingBusy=false;dialog.removeEventListener('close',close);dialog.close();}
+  }
   let graphGroupPanel=false,graphArtwork=false,graphFocus=false,focusRail=true;
   let practiceCoachExpanded=false, railOpen=true, graphZoom=1,graphPan={x:0,y:0},lastDesignTab='graph',lastDesignView='assembly',lastDesignModule='top';
   let graphReadablePending=true, previousGraphView=null,graphViewportAuto=true;
@@ -101,7 +165,7 @@
     else if(e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();if(applyHeaderName(el)){el.blur();finishNameRender();}}
     else if(e.key==='Tab'&&!applyHeaderName(el)){e.preventDefault();e.stopImmediatePropagation();}
   },true);
-  function workbookSnapshot(){window.WIUBridge?.finish();return W.envelope(project,workspace(),sessionKind);}
+  function workbookSnapshot(){window.WIUBridge?.finish();return W.envelope(window.WIUTopScene.withDrawingSnapshot(project),workspace(),sessionKind);}
   function stageNav(){
     const current=currentView==='diagram'?'design':tab==='check'?'check':['bundle','export'].includes(tab)?'delivery':'design';
     const n=issues().filter(i=>i.severity==='error').length;
@@ -147,9 +211,13 @@
     if(port){const keys=(row.instances||[]).map(id=>id+'::'+port.name);const exact=$$('[data-action="wb-pin"]',shell).filter(e=>keys.includes(e.dataset.id));if(exact.length)return exact;}
     return $$('[data-graph-drag]',shell).filter(e=>(row.instances||[]).includes(e.dataset.graphDrag)).map(e=>e.closest('.wb-block')||e);
   }
-  function locateGraphFind(){const row=graphFindPlan?.matches[graphFindIndex];if(!row)return;const node=graphFindNodes(row)[0],sc=$('.wb-canvas-scroll',shell);if(!node?.getBoundingClientRect||!sc)return;
-    const r=node.getBoundingClientRect(),v=sc.getBoundingClientRect(),panel=graphFindPanel.getBoundingClientRect(),right=Math.min(v.right,panel.left-20),width=Math.max(160,right-v.left);
-    const x=(r.left+r.width/2-v.left-graphPan.x)/graphZoom,y=(r.top+r.height/2-v.top-graphPan.y)/graphZoom;previousGraphView={zoom:graphZoom,pan:{...graphPan}};graphZoom=Math.max(.85,Math.min(1.25,graphZoom));graphPan={x:width/2-x*graphZoom,y:v.height/2-y*graphZoom};applyGraphZoom();
+  function locateGraphFind(){const row=graphFindPlan?.matches[graphFindIndex];if(!row)return;const sc=$('.wb-canvas-scroll',shell);if(!sc)return;
+    const scene=window.WIUTopScene.peek(project);let point=null;
+    if(row.kind==='net'||row.target==='net'){const n=project.nets.find(n=>n.id===(row.targetId||row.id)),label=scene?.labels.find(t=>t.net===n?.name);point=scene?.points['top::'+n?.id]||(label?{x:label.x,y:label.y}:null);}
+    else if(row.portId){const m=project.modules.find(m=>m.id===row.moduleId),port=m?.ports.find(p=>p.id===row.portId);point=scene?.points[row.instances?.[0]+'::'+port?.name];}
+    const node=graphFindNodes(row)[0],v=sc.getBoundingClientRect(),panel=graphFindPanel.getBoundingClientRect(),right=Math.min(v.right,panel.left-20),width=Math.max(160,right-v.left);
+    if(!point&&node?.getBoundingClientRect){const r=node.getBoundingClientRect();point={x:(r.left+r.width/2-v.left-graphPan.x)/graphZoom,y:(r.top+r.height/2-v.top-graphPan.y)/graphZoom};}
+    if(!point)return;previousGraphView={zoom:graphZoom,pan:{...graphPan}};graphReadablePending=false;graphZoom=Math.max(.85,Math.min(1.25,graphZoom));graphPan={x:width/2-point.x*graphZoom,y:v.height/2-point.y*graphZoom};applyGraphZoom();
   }
   function refreshGraphFind(locate=false){
     if(!graphFindVisible())return;if(graphFindOwner!==project.workbook.projectId){closeGraphFind();return;}
@@ -224,14 +292,16 @@
     if(graphObject.kind==='instance'){
       const i=project.instances.find(v=>v.id===graphObject.id),m=i&&project.modules.find(v=>v.name===i.module);
       if(!i)return '';
-      return caption(i.name)+(m?button('wb-open','編輯共用介面',m.id):'')+button('instance-edit','實例參數／名稱',i.id)+button('graph-duplicate','建立副本',i.id)+button('graph-table','查看接線',i.id)+button('instance-delete','移除此實例',i.id);
+      const layout=window.WIUInstanceLayout.settings(project,i.id),bar=layout.shape==='bar';
+      const layouts='<span class="r128-layout-tools" role="group" aria-label="實例圖面版型">'+button('instance-shape','一般方塊',i.id,'data-shape="box" aria-pressed="'+!bar+'"')+button('instance-shape','水平長條',i.id,'data-shape="bar" aria-pressed="'+bar+'"')+(bar?button('instance-bottom','放到底部',i.id)+button('instance-compact',layout.compact?'展開全部訊號':'精簡標籤',i.id)+'<label>最小寬度 <input type="number" min="580" step="100" data-layout-width="'+esc(i.id)+'" value="'+(layout.width||580)+'" aria-label="長條最小寬度"></label>':'')+'</span>';
+      return caption(i.name)+layouts+(m?button('wb-open','編輯共用介面',m.id):'')+button('instance-edit','實例參數／名稱',i.id)+button('graph-duplicate','建立副本',i.id)+button('graph-table','查看接線',i.id)+button('instance-delete','移除此實例',i.id);
     }
     const e=pin||window.WIUGraphWiring.endpoints(project).find(v=>v.key===graphObject.id);
     if(!e)return '';
     if(e.top)return caption(e.label)+button('graph-start-at-pin','從此接線',e.key)+button('net-inspect','查看接線',e.net.id);
     const binding=e.expr===null||e.expr===undefined?'未設定':e.expr===''?'刻意不接 NC':e.expr;
     return caption(e.label+' · '+binding)+button('graph-start-at-pin',e.expr==null?'從此接線':'從此改接',e.key)+
-      button('pin-connect','設定綁定',e.key)+(e.port.direction!=='output'?button('pin-quick-constant','接 0',e.key,'data-value="0"')+button('pin-quick-constant','接 1',e.key,'data-value="1"')+button('connection-choice','其他常數',e.key,'data-kind="constant"'):'')+
+      (window.WIUInstanceLayout.settings(project,e.instance).shape==='bar'?button('bar-pin-side','移到上緣',e.key,'data-side="top"')+button('bar-pin-side','移到下緣',e.key,'data-side="bottom"'):'')+button('pin-connect','設定綁定',e.key)+(e.port.direction!=='output'?button('pin-quick-constant','接 0',e.key,'data-value="0"')+button('pin-quick-constant','接 1',e.key,'data-value="1"')+button('connection-choice','其他常數',e.key,'data-kind="constant"'):'')+
       button('connection-choice','刻意不接 NC',e.key,'data-kind="open"')+button('graph-table','查看接線表',e.instance,'data-pin="'+esc(e.key)+'"');
   }
   function selectGraphInstance(id){
@@ -345,9 +415,9 @@
     graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();
     graphObject=null;graphPinHint='';applyGraphNetFocus();
   }
-  function downloadVisioWithGates(mode='native-routed'){
+  async function downloadVisioWithGates(mode='native-routed'){
     let result;
-    try{result=window.WIUTopScene.exportDrawing(project,{mode});}
+    try{result=await drawingTask('export',{mode});if(!result)return false;}
     catch(error){
       openDialog('無法產生 VBS 圖面','<p>原生與固定圖形的產生流程未能完成。這不是要求先排除電氣或跳線警告：</p><pre style="white-space:pre-wrap">'+esc(error.message||error)+'</pre>');
       return false;
@@ -360,9 +430,9 @@
     toast('VBS 已產生並送出下載'+(result.fallbackError?'（固定圖形備用，沒有動態 GlueTo）':'')+'。'+(n?n+' 項提醒已保留在檢查與 VBS 檔頭；不阻擋下載。':'')+(d.electricalIssues.length?'電氣檢查未通過，這份檔案只是目前圖面。':'')+' Windows Visio 尚待實機核對。');
     return true;
   }
-  function previewGraphLayout(kind){
+  async function previewGraphLayout(kind){
     if(kind==='arrange'&&(project.workbook.layoutLocks||[]).length){scopedLayoutForm();return;}
-    const G=window.WIUTopScene,before=JSON.stringify(project),plan=window.WIUWorkflowR118.layoutPlan(project,kind,G,window.WIUGraphLayout);
+    const G=window.WIUTopScene,before=JSON.stringify(project),plan=await drawingTask('layout',{kind});if(!plan)return;if(JSON.stringify(project)!==before){toast('專案已變更，請重新預覽。');return;}
     const title={arrange:'整理 Block 與 Top ports',repair:'局部修復跳線與線距',optimize:'重新自動走線'}[kind];
     const picture=scene=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(G.svg(scene));
     const summary=scene=>{const q=scene.routeQualityR98?.summary||{};return '安全衝突 '+(q.finalInvalid||0)+' · 線距不足 '+(q.parallelSpacing?.count||0)+' · 未完成跳線 '+(scene.crossingSummary?.unresolved||0);};
@@ -371,6 +441,7 @@
   function optimizeGraphRoutes(){previewGraphLayout('optimize');}
   function repairGraphJumps(){previewGraphLayout('repair');}
   function showGraphCrossingReview(){
+    if(!window.WIUTopScene.peek(project)||window.WIUTopScene.peek(project).previewOnly){go('graph');toast('圖面目前為快速預覽，請先完成背景整理，再查看交叉檢查。');return;}
     const scene=window.WIUTopScene.create(project),summary=scene.crossingSummary,issueList=scene.crossingIssues,quality=scene.routeQualityR98?.summary,spacing=quality?.parallelSpacing?.count||0;
     const locate=issue=>Number.isFinite(issue.x)&&Number.isFinite(issue.y)?'<button type="button" data-action="graph-jump" data-graph-x="'+Math.round(issue.x)+'" data-graph-y="'+Math.round(issue.y)+'">定位 ('+Math.round(issue.x)+', '+Math.round(issue.y)+')</button>':'';
     const gapIssues=quality?.parallelSpacing?.issues||[];
@@ -419,16 +490,10 @@
     label.focus({preventScroll:true});label.select();
   }
   shell.addEventListener('pointerdown',e=>{
-    const label=e.target.closest?.('[data-wire-name]');
-    if(!label||!label.readOnly||e.button!==0)return;
-    // A readonly visual label should never steal text focus from the current selection.
-    e.preventDefault();
-    const prior=document.activeElement;
-    if(prior?.dataset?.wireEditing==='true'&&prior!==label){
-      const name=label.dataset.wireName,append=e.ctrlKey||e.metaKey;
-      prior.blur();e.stopImmediatePropagation();
-      selectGraphNet(name,append); // blur may rebuild the canvas; apply to the new one
-    }
+    const label=e.target.closest?.('[data-wire-name]');if(!label||e.button!==0)return;
+    e.stopImmediatePropagation();
+    if(e.ctrlKey||e.metaKey){e.preventDefault();selectGraphNet(label.dataset.wireName,true);return;}
+    if(label.readOnly){e.preventDefault();document.activeElement?.blur();selectGraphNet(label.dataset.wireName,false);beginGraphLabelEdit(label);}
   },true);
   // Don't allow canvas pan/pointer capture to swallow a Group title click.
   // This must run in capture phase, before normal panning can claim the pointer.
@@ -442,7 +507,7 @@
     const clear=e.target.closest('[data-graph-clear-net]');if(clear){e.preventDefault();e.stopImmediatePropagation();clearGraphNetFocus();return;}
     if(e.target.closest('[data-graph-net-details]')){e.preventDefault();e.stopImmediatePropagation();showGraphNetDetails();return;}
     const label=e.target.closest('[data-wire-name]');
-    if(label&&label.readOnly){e.preventDefault();e.stopImmediatePropagation();selectGraphNet(label.dataset.wireName,e.ctrlKey||e.metaKey);return;}
+    if(label&&label.readOnly){e.preventDefault();e.stopImmediatePropagation();return;}
     const hit=e.target.closest('[data-wire-hit]');if(hit){e.preventDefault();e.stopImmediatePropagation();selectGraphNet(hit.dataset.wireHit,e.ctrlKey||e.metaKey);return;}
     if((graphObject||graphNetFocus.size||graphGroupFocus.size)&&e.target.closest('.wb-canvas')&&!e.target.closest('button,input,[data-graph-drag],[data-top-drag]'))clearGraphNetFocus();
   },true);
@@ -583,7 +648,7 @@
     };
     $('#r72-parameters',dialog).addEventListener('input',preview);preview();
   }
-  function newSheet(){openDialog('畫一個子模組','<p>先替模組命名，再在介面圖新增接腳。完成後直接放入 Top 使用。<\/p><label>Module 名稱<input id="wb-module-name" value="" placeholder="例如 cemac_core" spellcheck="false"><\/label>','建立介面頁',()=>{const result=W.createModule(project,$('#wb-module-name',dialog).value.trim());commit(()=>{project=result.project;});dialog.close();openSheet(result.id);});}
+  function newSheet(){openDialog('畫一個子模組','<p>先替模組命名，再在介面圖新增接腳。完成後直接放入 Top 使用。<\/p><label>Module 名稱<input id="wb-module-name" value="" placeholder="例如 cemac_core" spellcheck="false"><\/label>','建立介面頁',()=>{const result=W.createModule(project,$('#wb-module-name',dialog).value.trim());commit(()=>{project=result.project;},null,{deferRender:true});dialog.close();openSheet(result.id);});}
   function previewWorkbook(raw){const incoming=W.read(raw);openDialog('開啟 '+esc(incoming.project.top),'<p>'+incoming.project.modules.length+' 個模組定義 · '+incoming.project.instances.length+' 個 instances · '+(incoming.origin==='practice'?'練習專案：會在隔離環境開啟':'完整專案')+'<\/p>'+incoming.warnings.map(x=>'<p class="a-note">'+esc(x)+'<\/p>').join(''),'開啟專案',()=>{dialog.close();if(incoming.origin==='practice'&&sessionKind==='user')beginPractice(incoming.project,incoming.workspace.tab||'graph');else commit(()=>{project=incoming.project;graphNeedsPrepare=true;draft=null;});restoreWorkspace(incoming.workspace);saved=JSON.stringify(project);renderWorkbook();if(sessionKind==='user')stash();});}
   function readLegacyDiagram(raw){if(raw.version!==undefined&&(!Number.isInteger(raw.version)||raw.version<1||raw.version>5))throw Error('不支援這個舊圖檔版本。');openDialog('匯入舊版介面圖','<p>保留圖面原文並加入目前專案的「舊版保留圖面」，不會取代 Top 接線。<\/p>','保留圖面',()=>{commit(()=>{project.workbook.recovered.push({id:uid(),label:(raw.state||raw).moduleName||'舊版圖面',diagram:A.clone(raw)});});dialog.close();go('modules');});}
   function recoveredSheet(id){const entry=project.workbook.recovered.find(x=>x.id===id);if(!entry)return;const raw=entry.diagram.state||entry.diagram;openDialog('核對舊圖面 '+esc(raw.moduleName),'<p>請為這份介面設定不重複的 module 名稱。舊版圖面將成為可放入 Top 的介面骨架；現有接線不變。<\/p><label>Module 名稱<input id="wb-recovered-name" value="'+esc(C.validName(raw.moduleName)?raw.moduleName:'recovered_module')+'"><\/label><button data-action="discard-recovered" data-id="'+esc(id)+'">捨棄這份保留圖面…</button>','加入模組頁',()=>{const made=W.createModule(project,$('#wb-recovered-name',dialog).value.trim()),d=A.clone(raw);d.moduleName=made.project.modules.find(m=>m.id===made.id).name;const parsed=window.WIUBridge?.parseSheet(d,project.defineConfig);if(!parsed)throw Error('介面圖解析器尚未就緒。');const result=W.applyDiagram(made.project,made.id,d,parsed);result.project.workbook.recovered=result.project.workbook.recovered.filter(x=>x.id!==id);commit(()=>{project=result.project;});dialog.close();openSheet(made.id);});}
@@ -591,9 +656,9 @@
     const canvas=$('.wb-canvas',shell),sc=$('.wb-canvas-scroll',shell);if(!canvas||!sc||sc.clientWidth<50||sc.clientHeight<50)return;
     if(graphReadablePending){graphReadablePending=false;graphViewportAuto=true;graphZoom=Math.max(.08,Math.min(1,sc.clientWidth/Number(canvas.dataset.graphWidth||1400),sc.clientHeight/(parseFloat(canvas.style.height)||600)));graphPan={x:0,y:0};}
     const zoom=graphZoom||Math.max(.08,Math.min(1,(sc.clientWidth||1100)/Number(canvas.dataset.graphWidth||1400),(sc.clientHeight||600)/(parseFloat(canvas.style?.height)||600)));
-    if(!canvas.style)return;canvas.style.zoom=String(zoom);canvas.style.transformOrigin='0 0';canvas.style.transform='translate('+graphPan.x/zoom+'px,'+graphPan.y/zoom+'px)';
+    if(!canvas.style)return;canvas.style.zoom=String(zoom);canvas.style.setProperty('--r128-edit-scale',String(1/zoom));canvas.style.transformOrigin='0 0';canvas.style.transform='translate('+graphPan.x/zoom+'px,'+graphPan.y/zoom+'px)';
     sc.scrollLeft=0;sc.scrollTop=0;
-    const label=$('[data-graph-zoom-label]',shell);if(label)label.textContent=Math.round(zoom*100)+'%';
+    const scroll=$('.wb-canvas-scroll',shell);if(scroll)scroll.dataset.overview=String(!!graphWindow(window.WIUTopScene.peek(project)||{points:{}})?.overview);const label=$('[data-graph-zoom-label]',shell);if(label)label.textContent=Math.round(zoom*100)+'%';scheduleGraphViewport();
   }
   function setGraphZoom(mode,anchor,automatic=false){
     if(!automatic)graphViewportAuto=false;
@@ -616,21 +681,11 @@
     if(!presentation){toast('看圖模式尚未就緒，請稍後再按 F5。');return false;}
     if(window.WIUBridge?.prepareSave?.()===false)return false;
     const active=document.activeElement;
-    if(currentView==='assembly'&&active?.dataset.wireName&&!active.readOnly&&active.value!==active.defaultValue){
-      const match=/^([A-Za-z_$][\w$]*)\s*(\[[^\]\r\n]+:[^\]\r\n]+\])?$/.exec(active.value.trim());
-      try{
-        if(!match)throw Error('請輸入 wire_name 或 wire_name[MSB:LSB]。');
-        const trial=A.clone(project),net=trial.nets.find(net=>net.name===active.dataset.wireName);
-        if(!net)throw Error('找不到目前編輯的 net。');
-        A.renameNet(trial,net.id,match[1]);net.range=match[2]||'';trial.orgEdited=true;
-        active.readOnly=true;delete active.dataset.wireEditing;clearPendingField(active);
-        commit(()=>{project=trial;});
-      }catch(error){active.setAttribute('aria-invalid','true');toast(error.message);active.focus({preventScroll:true});return false;}
-    }
+    if(currentView==='assembly'&&active?.dataset.wireName&&!active.readOnly&&!applyWireField(active))return false;
     document.activeElement?.blur();
     try{
       if(currentView==='diagram')return presentation.open(null,{returnFocus:document.getElementById('canvas'),label:W.moduleOf(project,activeModule).name+' 介面看圖模式'});
-      const scene=window.WIUTopScene.create(project);
+      const scene=window.WIUTopScene.peek(project)||window.WIUTopScene.create(project,{fast:true});
       return presentation.open(scene,{returnFocus:$('.wb-canvas-scroll',shell),label:project.top+' TOP 接線看圖模式'});
     }catch(error){toast('看圖模式無法開啟，'+error.message);return false;}
   }
@@ -695,12 +750,12 @@
 
   function dirty(){return JSON.stringify(project)!==saved;}
   function saveRecord(){const id=project.workbook?.projectId||'initial';if(!saveRecords.has(id))saveRecords.set(id,{draftStatus:'idle',draftAt:null,downloadAt:null,downloadName:null});return saveRecords.get(id);}
-  function saveState(){if(pendingField&&!R119.dirtyField(pendingField.element))pendingField=null;const r=saveRecord();return {...r,practice:sessionKind==='practice',changedSinceDownload:dirty(),pendingEdit:pendingField?{label:pendingField.label,value:pendingField.element?.value||''}:null};}
+  function saveState(){for(const [key,d] of fieldDrafts)if(d.projectId!==project.workbook.projectId||!R119.dirtyField(d.element))fieldDrafts.delete(key);if(!pendingField||!fieldDrafts.has(pendingField.key))pendingField=[...fieldDrafts.values()].at(-1)||null;const r=saveRecord();return {...r,practice:sessionKind==='practice',changedSinceDownload:dirty(),pendingEdit:pendingField?{label:pendingField.label,value:pendingField.element?.value||''}:null};}
   function saveStatusText(state=saveState()){const parts=[];if(state.pendingEdit)parts.push('欄位待套用');parts.push(state.practice?'範例練習':state.draftStatus==='failed'?'草稿暫存失敗':state.draftStatus==='pending'?'草稿暫存中':state.draftStatus==='saved'&&state.draftAt?'草稿已暫存':'草稿尚未暫存');parts.push(state.downloadAt?(state.changedSinceDownload?'下載後有修改':'下載已送出'):(state.practice?'尚未另存':'尚未下載專案'));return parts.join(' · ');}
   function refreshSaveStatus(state=saveState()){const status=$('.r118-save-status',switchbar);if(!status)return;status.textContent=saveStatusText(state);status.dataset.state=state.draftStatus==='failed'?'failed':state.pendingEdit?'editing':state.draftStatus||'idle';const detail=[];if(state.pendingEdit)detail.push(state.pendingEdit.label+'：Enter／Tab 套用，Esc 取消');if(state.draftStatus==='failed')detail.push('最新修改尚未成功暫存；請修正待套用欄位並下載專案保留修改');else if(state.draftStatus==='pending')detail.push('正在等待本機草稿寫入');if(state.draftAt)detail.push('上次成功暫存：'+state.draftAt);if(state.downloadAt)detail.push('專案下載已送出：'+state.downloadName+'（'+state.downloadAt+'）；請在裝置下載列表確認');else detail.push('本機草稿與下載專案分開保存');status.title=detail.join('\n');}
   window.addEventListener('wiu-status-change',e=>refreshSaveStatus(e.detail||saveState()));
   function notifySaveState(){refreshSaveStatus();window.dispatchEvent(new CustomEvent('wiu-status-change',{detail:saveState()}));}
-  function writeDraft(){if(sessionKind==='practice')return;const r=saveRecord();try{const ws=workspace(),previous=localStorage.getItem(key),old=previous?JSON.parse(previous):null;if(old&&JSON.stringify(old.project)===JSON.stringify(project)&&JSON.stringify(old.workspace)===JSON.stringify(ws)){r.draftStatus='saved';r.draftAt=old.at||r.draftAt;notifySaveState();return;}const at=new Date().toISOString();localStorage.setItem(key,JSON.stringify({project,workspace:ws,at}));r.draftStatus='saved';r.draftAt=at;notifySaveState();}catch{r.draftStatus='failed';notifySaveState();toast('本機暫存失敗；請下載專案 JSON 保留已套用的修改。');}}
+  function writeDraft(){if(sessionKind==='practice')return;const r=saveRecord();try{const ws=workspace(),previous=localStorage.getItem(key),old=previous?JSON.parse(previous):null;if(old&&JSON.stringify(old.project)===JSON.stringify(project)&&JSON.stringify(old.workspace)===JSON.stringify(ws)){r.draftStatus='saved';r.draftAt=old.at||r.draftAt;notifySaveState();return;}const at=new Date().toISOString();localStorage.setItem(key,JSON.stringify({project:window.WIUTopScene.withDrawingSnapshot(project),workspace:ws,at}));r.draftStatus='saved';r.draftAt=at;notifySaveState();}catch{r.draftStatus='failed';notifySaveState();toast('本機暫存失敗；請下載專案 JSON 保留已套用的修改。');}}
   function stash(){clearTimeout(saveTimer);if(sessionKind==='practice')return;saveRecord().draftStatus='pending';notifySaveState();saveTimer=setTimeout(writeDraft,450);}
   const historyScope=()=>currentView==='diagram'?activeModule:'top';
   const historyIndex=list=>HF.historyEntry(list,historyScope())?.index??-1;
@@ -718,13 +773,13 @@
       // restores routing metadata as well as the renamed RTL and connections.
       // Editing a table must not run the hidden Top router. It can take minutes
       // on a dense design. Preserve saved positions; route when the graph opens.
-      if(!graphNeedsPrepare&&currentView==='assembly'&&tab==='graph')project.workbook.graphAutoR99=window.WIUTopScene.capture(project);
+      if(!graphNeedsPrepare&&window.WIUTopScene.peek(project)&&!window.WIUTopScene.peek(project).previewOnly)project.workbook.graphAutoR99=window.WIUTopScene.capture(project);
     }catch(e){project=previous;throw e;}
     if(before!==JSON.stringify(project)){
       remember(before,historyOptions||{});stash();
       if(L.isLearning(project)&&L.tasks(project).some(t=>t.id===lessonTask&&t.done))lessonTask='';
     }
-    if(nameCommitQuiet){nameRefreshPending=true;}else if(quietEdit)refreshMeta();else render();
+    if(historyOptions?.deferRender){}else if(nameCommitQuiet){nameRefreshPending=true;}else if(quietEdit)refreshMeta();else render();
     if(msg)toast(msg);
   }
   function reconcileHistoryView(){
@@ -739,7 +794,7 @@
   function asciiJson(value){return JSON.stringify(value,null,2).replace(/[\u007f-\uffff]/g,ch=>'\\u'+ch.charCodeAt(0).toString(16).padStart(4,'0'));}
   function download(name,text,type='text/plain'){const bytes=typeof text==='string'?new TextEncoder().encode(text):text;recentDownload={name,data:text,type,bytes:bytes.byteLength??bytes.length??0,text:typeof text==='string'?text:/\.vbs$/i.test(name)&&text instanceof Uint8Array?new TextDecoder('utf-16le').decode(text.subarray(2)):null};const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);renderWorkbook();}
   function filename(){return C.validName(project.top)?project.top:'wrapper_top';}
-  function view(v){if(v!=='assembly'||tab!=='graph')closeGraphFind();if(currentView==='diagram'&&v!=='diagram')sheetViews.set(project.workbook.projectId+'::'+activeModule,window.WIUBridge?.uiSnapshot());if(v!=='assembly'||tab!=='graph')finishGraphConnection();currentView=v;diagramBar.hidden=v!=='diagram';window.WIUAssemblyActive=v==='assembly';document.body.classList.toggle('a-assembly',v==='assembly');shell.hidden=v!=='assembly';$$('[data-view]',switchbar).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===v)));if(v==='diagram')window.__WSS_TEST__?.render();else requestAnimationFrame(applyGraphZoom);}
+  function view(v){if(v!=='assembly'||tab!=='graph')pauseGraph('navigation');if(v!=='assembly'||tab!=='graph')closeGraphFind();if(currentView==='diagram'&&v!=='diagram')sheetViews.set(project.workbook.projectId+'::'+activeModule,window.WIUBridge?.uiSnapshot());if(v!=='assembly'||tab!=='graph')finishGraphConnection();currentView=v;diagramBar.hidden=v!=='diagram';window.WIUAssemblyActive=v==='assembly';document.body.classList.toggle('a-assembly',v==='assembly');shell.hidden=v!=='assembly';$$('[data-view]',switchbar).forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===v)));if(v==='diagram')window.__WSS_TEST__?.render();else requestAnimationFrame(applyGraphZoom);}
 
   const topReason=value=>C.validName(value.trim())?'':'Top 名稱需以英文字母或底線開頭，後面可用字母、數字、底線或 $；不可含減號或空白。例如 bad_name、mac_top。';
   function inlineTop(){const field=$('#a-top-name',switchbar),note=$('#r68-top-help',switchbar);if(!field||!note){document.body.classList.remove('r69-top-invalid');return;}const reason=topReason(field.value);note.textContent=reason;document.body.classList.toggle('r69-top-invalid',!!reason);if(!reason)field.classList.remove('r68-located');field.setAttribute('aria-invalid',String(!!reason));field.setAttribute('aria-describedby','r68-top-help');}
@@ -867,12 +922,14 @@
     if(back&&tab==='graph'){const sc=$('.wb-canvas-scroll',shell);if(sc){sc.scrollLeft=back.scrollX;sc.scrollTop=back.scrollY;}}
   }
   function stepFooter(){return '';}
-  function render(){if(pendingField&&!R119.dirtyField(pendingField.element))pendingField=null;renderMain();if(graphFindVisible())refreshGraphFind();else closeGraphFind();refreshIssueQueue();refreshSaveStatus();}
+  function render(){return window.WIUInteractionR128.paint('assembly',renderNow);}
+  function renderNow(){saveState();const drafts=[...fieldDrafts.values()].map(d=>({...d,value:d.element.value,invalid:d.element.getAttribute('aria-invalid'),readonly:d.element.readOnly}));renderMain();for(const d of drafts){if(d.element.isConnected)continue;const next=$$('input,textarea,select').find(el=>window.WIUInteractionR128.key(el)===d.domKey);if(next){next.value=d.value;next.readOnly=d.readonly;if(d.invalid)next.setAttribute('aria-invalid',d.invalid);const saved=fieldDrafts.get(d.key);if(saved)saved.element=next;}} if(graphFindVisible())refreshGraphFind();else closeGraphFind();refreshIssueQueue();refreshSaveStatus();}
   function renderMain(){
     // r102: A Module Sheet edit must not reconstruct the hidden Top workspace.
     // Rendering that invisible scene is unnecessary for direction/comment edits;
     // the Top scene is refreshed when the user explicitly opens that tab.
-    if(currentView==='diagram'){renderWorkbook();return;}
+    if(currentView==='diagram'){pauseGraph('navigation');renderWorkbook();return;}
+    if(tab!=='graph')pauseGraph('navigation');
     const priorCanvas=currentView==='assembly'&&tab==='graph'&&lastPanel==='graph'?$('.wb-canvas',shell):null;
     const anchor=priorCanvas?.getBoundingClientRect?.(),scrollNodes=[];
     if(anchor){graphZoom=Number(priorCanvas.style.zoom)||graphZoom;for(let n=shell.parentElement;n;n=n.parentElement)scrollNodes.push([n,n.scrollLeft,n.scrollTop]);}
@@ -913,14 +970,8 @@
   function renderInstances(){return project.instances.map(i=>'<div class="a-card"><strong class="a-mono">'+esc(i.name)+'<\/strong><small>'+esc(i.module)+'<\/small><div class="a-actions"><button data-action="instance-filter" data-id="'+esc(i.id)+'">連線<\/button><button data-action="instance-edit" data-id="'+esc(i.id)+'">設定<\/button><button data-action="instance-delete" data-id="'+esc(i.id)+'" aria-label="刪除 '+esc(i.name)+'">✕<\/button><\/div><\/div>').join('')||'<div class="a-empty-small">匯入後，按「加入 instance」建立實際子模組。<\/div>';}
   function renderPanel(rows,all){
     if(tab==='graph'){
-      if(graphNeedsPrepare){const prepared=window.WIUTopScene.prepare(project);project.workbook.graphAutoR99=prepared.snapshot;graphNeedsPrepare=false;stash();}
-      const page=V.graph(project,graphStart,{artwork:graphArtwork,focus:graphFocus,groups:graphGroupPanel,connectMode:graphConnectMode});
-      const freeze=window.WIUTopScene.capture(project);
-      if(freeze&&JSON.stringify(freeze)!==JSON.stringify(project.workbook.graphAutoR99||null)){
-        // Layout metadata only: no electrical connection, RTL or undo entry changes.
-        project.workbook.graphAutoR99=freeze;stash();
-      }
-      return page;
+      const scene=backgroundScene();
+      return backgroundStatus(scene)+V.graph(project,graphStart,{scene,viewport:graphWindow(scene),artwork:graphArtwork,focus:graphFocus,groups:graphGroupPanel,connectMode:graphConnectMode});
     }
     if(tab==='setup')return flowUI.start();
     if(tab==='modules')return renderModuleWorkspace();
@@ -1072,7 +1123,7 @@
     openDialog('批次分配 bus 切片','<div class="r119-grid3"><label>Bus 名稱<input id="a-slice-name" value="data_bus"></label><label>起始 bit<input id="a-slice-start" type="number" min="0" value="0"></label><label>分配方向<select id="r119-slice-direction"><option value="up">由低位往高位</option><option value="down">由高位往低位</option></select></label></div><p>可調整接腳順序。依有效位寬連續分配，下一步核對每筆切片與宣告範圍。</p><div id="r119-slice-order"></div>','預覽切片',()=>{const plan=R119.slices(project,order,{name:$('#a-slice-name',dialog).value.trim(),start:Number($('#a-slice-start',dialog).value),direction:$('#r119-slice-direction',dialog).value});changePlan('核對切片順序與範圍',plan.changes,plan.nets);});
     function draw(){const host=$('#r119-slice-order',dialog);host.innerHTML=order.map((key,n)=>{const row=rows.find(r=>r.key===key);return '<div class="r119-preview-order"><code>'+esc(row.instanceName+'.'+row.port.name)+'</code><span>'+esc(pinRange(row))+'</span><button type="button" data-r119-up="'+n+'" '+(!n?'disabled':'')+' aria-label="上移 '+esc(row.port.name)+'">↑</button><button type="button" data-r119-down="'+n+'" '+(n===order.length-1?'disabled':'')+' aria-label="下移 '+esc(row.port.name)+'">↓</button></div>';}).join('');host.querySelectorAll('button').forEach(b=>b.onclick=()=>{const n=Number(b.dataset.r119Up??b.dataset.r119Down),to=n+(b.dataset.r119Up!==undefined?-1:1);[order[n],order[to]]=[order[to],order[n]];draw();});}draw();
   }
-  function saveProject(){if(dialog.open){const message='尚未送出專案下載：請先套用或關閉目前視窗，再按 Ctrl+S。';const error=$('#a-dialog-error',dialog);if(error){error.textContent=message;error.hidden=false;}else toast(message);return false;}document.activeElement?.blur();if(pendingField?.element?.id==='r124-name'){toast('名稱尚未套用；請修正紅色欄位，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(pendingField?.element?.dataset.wireName){toast('線名尚未套用；請修正後按 Enter，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(window.WIUBridge?.prepareSave?.()===false)return false;const data=workbookSnapshot(),name=(sessionKind==='practice'?'practice-':'')+filename()+'.wiu.json';download(name,asciiJson(data),'application/json');saved=JSON.stringify(project);downloadState.project=saved;Object.assign(saveRecord(),{downloadAt:new Date().toISOString(),downloadName:name});render();notifySaveState();toast('專案下載已送出：'+name+'。請在裝置下載列表確認；本機草稿與下載檔分開保存。');return true;}
+  function saveProject(){if(dialog.open){const message='尚未送出專案下載：請先套用或關閉目前視窗，再按 Ctrl+S。';const error=$('#a-dialog-error',dialog);if(error){error.textContent=message;error.hidden=false;}else toast(message);return false;}document.activeElement?.blur();saveState();if(pendingField&&!pendingField.element.isConnected){tab=pendingField.tab;view(pendingField.currentView);render();}if(pendingField?.element?.id==='r124-name'){toast('名稱尚未套用；請修正紅色欄位，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(pendingField?.element?.dataset.wireName){toast('線名尚未套用；請修正後按 Enter，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(pendingField){toast('尚未儲存：請先修正紅色欄位，或按 Esc 取消。');pendingField.element?.focus({preventScroll:true});return false;}if(window.WIUBridge?.prepareSave?.()===false)return false;const data=workbookSnapshot(),name=(sessionKind==='practice'?'practice-':'')+filename()+'.wiu.json';download(name,asciiJson(data),'application/json');saved=JSON.stringify(project);downloadState.project=saved;Object.assign(saveRecord(),{downloadAt:new Date().toISOString(),downloadName:name});render();notifySaveState();toast('專案下載已送出：'+name+'。請在裝置下載列表確認；本機草稿與下載檔分開保存。');return true;}
   function topViewTabs(active){return '<nav class="r119-view-tabs" aria-label="Top 檢視"><button data-action="wb-open" data-id="top" '+(active==='io'?'aria-current="page"':'')+'>Top I/O</button><button data-action="wb-graph" '+(active==='graph'?'aria-current="page"':'')+'>接線圖</button><button data-action="graph-table" '+(active==='table'?'aria-current="page"':'')+'>接線表</button></nav>';}
   function reconcileHistorySelection(){const valid=new Set(A.pinRows(project).map(r=>r.key));selected=new Set([...selected].filter(k=>valid.has(k)));if(!valid.has(focusedPin))focusedPin='';}
   function showHistoryEffect(entry,reverse){
@@ -1131,13 +1182,17 @@
     for(const b of $$('[data-r119-profile]',dialog))b.onclick=()=>safe(()=>{const profile=profiles[Number(b.dataset.r119Profile)],plan=D.plan(project,profile.defineConfig,P),impact=window.WIUImportReview.compareInterfaces(project,plan.project);openDialog('切換組態 · '+profile.name,'<p>'+plan.defineChanges.length+' 個 Defines 變化 · '+impact.changed.length+' 個接腳／位寬變化。</p><ul>'+plan.defineChanges.map(x=>'<li>'+esc(x.name+'：'+x.before+' → '+x.after)+'</li>').join('')+'</ul>'+interfaceImpactTable(impact.changed)+issueList(impact.errors),'套用並返回原位置',()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>{project=plan.project;},'組態已切換為 '+profile.name,{scope:'project',label:'切換組態 '+profile.name});returnToWork();});});
   }
   function interfaceImpactTable(rows){return '<div class="a-tablebox"><table class="a-table"><thead><tr><th>接腳</th><th>目前</th><th>變更後</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.instanceName+'.'+r.port)+'</td><td>'+esc(r.before?(r.before.direction+' '+r.before.range):'不存在')+'</td><td>'+esc(r.after?(r.after.direction+' '+r.after.range):'不存在')+'</td></tr>').join('')+'</tbody></table></div>';}
+  function changeInstanceLayout(id,patch){
+    const scene=window.WIUTopScene.create(project);graphNeedsPrepare=false;
+    commit(()=>window.WIUInstanceLayout.set(project,id,patch,scene.placed),'已更新此實例圖面；RTL 接線不變，可一次復原。',{label:'調整 instance 版型',scope:'top'});
+  }
   function toggleLayoutLock(){const id=graphObject?.kind==='instance'?graphObject.id:'';if(!id){toast('先選取要鎖定的 Block。');return;}commit(()=>{const locks=new Set(project.workbook.layoutLocks||[]);locks.has(id)?locks.delete(id):locks.add(id);project.workbook.layoutLocks=[...locks];},'已更新自動排列鎖定。',{label:'切換 Block 排列鎖定',scope:'top'});}
   function scopedLayoutForm(){
     const G=window.WIUTopScene,Ly=window.WIUGraphLayout,before=JSON.stringify(project),scene=G.create(project),locks=new Set(project.workbook.layoutLocks||[]),chosen=graphObject?.kind==='instance'?graphObject.id:'';
     openDialog('整理指定 Block','<p>只移動勾選的 Block；鎖定與未勾選的位置、Top ports 順序保持。手動線路保留，僅隨移動的端點延伸，套用後可查看圖面檢查。</p><div class="a-actions"><button id="r119-layout-all">選取全部未鎖定</button></div>'+scene.placed.map(b=>'<label><input type="checkbox" data-r119-layout="'+esc(b.instance.id)+'" '+(locks.has(b.instance.id)?'disabled':!chosen||chosen===b.instance.id?'checked':'')+'> '+esc(b.instance.name)+(locks.has(b.instance.id)?' · 已鎖定':'')+'</label>').join(''),'預覽局部排列',()=>{
       const ids=new Set($$('[data-r119-layout]:checked',dialog).map(el=>el.dataset.r119Layout));if(!ids.size)throw Error('請選取至少一個未鎖定 Block。');const next=A.clone(project);next.workbook.graphAutoR99=G.capture(project);const moving=scene.placed.filter(b=>ids.has(b.instance.id)),fixed=scene.placed.filter(b=>!ids.has(b.instance.id)),placed=fixed.slice();let x=Math.min(...moving.map(b=>b.x)),y=Math.min(...moving.map(b=>b.y));
       for(const b of moving){while(placed.some(o=>x<o.x+o.width+90&&x+b.width+90>o.x&&y<o.y+o.height+90&&y+b.height+90>o.y)){y=Math.max(...placed.filter(o=>x<o.x+o.width+90&&x+b.width+90>o.x&&y<o.y+o.height+90&&y+b.height+90>o.y).map(o=>o.y+o.height+100));}Ly.move(next,b.instance.id,x,y);placed.push({...b,x,y});y+=b.height+110;}
-      const after=G.create(next),moved=after.placed.filter(b=>{const old=scene.placed.find(x=>x.instance.id===b.instance.id);return old.x!==b.x||old.y!==b.y;});
+      const after=G.create(next,{fast:true}),moved=after.placed.filter(b=>{const old=scene.placed.find(x=>x.instance.id===b.instance.id);return old.x!==b.x||old.y!==b.y;});
       if(fixed.some(b=>{const n=after.placed.find(x=>x.instance.id===b.instance.id);return n.x!==b.x||n.y!==b.y;}))throw Error('局部排列會影響其他 Block，未套用。');
       const img=s=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(G.svg(s));openDialog('核對局部排列','<p>將移動 '+moved.length+' 顆 Block，未選取／鎖定的 '+fixed.length+' 顆保持位置。</p><div class="r118-layout-compare"><figure><figcaption>目前</figcaption><img src="'+img(scene)+'"></figure><figure><figcaption>預覽</figcaption><img src="'+img(after)+'"></figure></div>','套用局部排列',()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>{project=next;},'已套用局部排列。',{scope:'top',label:'整理指定 Block'});dialog.close();});
     });$('#r119-layout-all',dialog).onclick=()=>$$('[data-r119-layout]:not(:disabled)',dialog).forEach(el=>el.checked=true);
@@ -1161,6 +1216,13 @@
     'graph-crossing-review':()=>showGraphCrossingReview(),
     'graph-jump':b=>jumpGraphIssue(Number(b.dataset.graphX),Number(b.dataset.graphY)),
     'graph-table':b=>openGraphTable(b?.dataset),
+    'instance-shape':b=>changeInstanceLayout(b.dataset.id,{shape:b.dataset.shape}),
+    'instance-bottom':b=>{const scene=window.WIUTopScene.create(project),others=scene.placed.filter(x=>x.instance.id!==b.dataset.id);graphNeedsPrepare=false;commit(()=>{project.workbook.graphPositions||={};project.workbook.graphPositions[b.dataset.id]={x:Math.min(800,...others.map(x=>x.x)),y:Math.max(130,...others.map(x=>x.y+x.height))+180};delete project.workbook.graphAutoR99;},'已放到底部；可復原。',{scope:'top',label:'長條放到底部'});},
+    'instance-compact':b=>changeInstanceLayout(b.dataset.id,{compact:!window.WIUInstanceLayout.settings(project,b.dataset.id).compact,expanded:[]}),
+    'graph-background-toggle':()=>{if(graphJob?.status==='running')pauseGraph();else graphJob=null;render();},
+    'graph-drawing-cancel':()=>{drawingRunner.cancel();dialog.close();},
+    'bar-group-toggle':b=>{const layout=window.WIUInstanceLayout.settings(project,b.dataset.id),scene=window.WIUTopScene.create(project),block=scene.placed.find(x=>x.instance.id===b.dataset.id),set=new Set(layout.compact?layout.expanded||[]:block.barGroups.map(g=>g.key));set.has(b.dataset.group)?set.delete(b.dataset.group):set.add(b.dataset.group);changeInstanceLayout(b.dataset.id,{compact:true,expanded:[...set]});},
+    'bar-pin-side':b=>{const e=window.WIUGraphWiring.endpoints(project).find(e=>e.key===b.dataset.id);if(!e?.port)return;const cfg=window.WIUInstanceLayout.settings(project,e.instance);changeInstanceLayout(e.instance,{pinSides:{...cfg.pinSides,[e.port.id]:b.dataset.side}});},
     'graph-select-instance':b=>selectGraphInstance(b.dataset.id),
     'graph-lock-current':toggleLayoutLock,
     'graph-locate-instance':b=>locateGraphInstance(b.dataset.id),
@@ -1515,19 +1577,20 @@
       return new Promise(resolve=>setTimeout(resolve,24)).then(()=>{if(generation===dialogGeneration&&dialog.open)return action?.();}).finally(()=>{if(generation===dialogGeneration){dialogBusy=false;b.disabled=false;status.remove();}});
     }if(b.dataset.dialogFile)pick(b.dataset.dialogFile,b.dataset.moduleTarget||'');if(b.dataset.action&&actions[b.dataset.action])return actions[b.dataset.action](b);}));
   dialog.addEventListener('input',e=>{if(e.target.id!=='fg-tool-search')return;const query=e.target.value.trim().toLowerCase();let found=0;for(const item of $$('[data-tool-search]',dialog)){item.hidden=!item.dataset.toolSearch.includes(query);if(!item.hidden)found++;}$('#fg-tool-empty',dialog).hidden=found>0;});
-  function setPendingField(el){if(el.value===el.defaultValue){clearPendingField(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='與目前設定相同';return;}const label=el.dataset.connection?(A.pinRows(project).find(r=>r.key===el.dataset.connection)?.instanceName+'.'+el.dataset.connection.split('::')[1]):el.dataset.wireName?'線名 '+el.dataset.wireName:el.id==='r124-name'?'模組名稱':'Top 名稱';pendingField={element:el,label};el.dataset.r118Editing='true';el.setAttribute('aria-description','編輯中；Enter 或 Tab 套用，Esc 取消。');const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='編輯中 · Enter／Tab 套用 · Esc 取消';notifySaveState();}
-  function clearPendingField(el){delete el.dataset.r118Editing;if(pendingField?.element===el)pendingField=null;notifySaveState();}
-  function handleInput(e){if(e.target.dataset.connection||e.target.dataset.wireName||e.target.id==='a-top-name'){if(e.target.dataset.wireName)e.target.removeAttribute('aria-invalid');setPendingField(e.target);if(e.target.id==='a-top-name')inlineTop();return;}if(e.target.id==='ux-help-search'){helpQuery=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='help')return;const pos=e.target.selectionStart;render();const input=$('#ux-help-search',shell);input?.focus();input?.setSelectionRange?.(pos,pos);},180);return;}if(e.target.id!=='a-filter')return;if(graphTableOrigin)delete graphTableOrigin.pinKey;filter=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='connections')return;const focused=document.activeElement?.id==='a-filter',start=e.target.selectionStart,end=e.target.selectionEnd;render();if(focused){const input=$('#a-filter',shell);input.focus();input.setSelectionRange?.(start,end);}},180);}
+  function setPendingField(el){if(el.value===el.defaultValue){clearPendingField(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='與目前設定相同';return;}const label=el.dataset.connection?(A.pinRows(project).find(r=>r.key===el.dataset.connection)?.instanceName+'.'+el.dataset.connection.split('::')[1]):el.dataset.wireName?'線名 '+el.dataset.wireName:el.id==='r124-name'?'模組名稱':'Top 名稱';const domKey=window.WIUInteractionR128.key(el),key=project.workbook.projectId+'::'+domKey;pendingField={element:el,label,key,domKey,projectId:project.workbook.projectId,tab,currentView};fieldDrafts.set(key,pendingField);el.dataset.r118Editing='true';el.setAttribute('aria-description','編輯中；Enter 或 Tab 套用，Esc 取消。');const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='編輯中 · Enter／Tab 套用 · Esc 取消';notifySaveState();}
+  function clearPendingField(el){delete el.dataset.r118Editing;for(const [key,d] of fieldDrafts)if(d.element===el)fieldDrafts.delete(key);if(pendingField?.element===el)pendingField=null;notifySaveState();}
+  function handleInput(e){if(e.target.dataset.connection||e.target.dataset.wireName||e.target.dataset.net||e.target.dataset.assign||e.target.id==='a-top-name'){if(e.target.dataset.wireName)e.target.removeAttribute('aria-invalid');setPendingField(e.target);if(e.target.id==='a-top-name')inlineTop();return;}if(e.target.id==='ux-help-search'){helpQuery=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='help')return;const pos=e.target.selectionStart;render();const input=$('#ux-help-search',shell);input?.focus();input?.setSelectionRange?.(pos,pos);},180);return;}if(e.target.id!=='a-filter')return;if(graphTableOrigin)delete graphTableOrigin.pinKey;filter=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='connections')return;const focused=document.activeElement?.id==='a-filter',start=e.target.selectionStart,end=e.target.selectionEnd;render();if(focused){const input=$('#a-filter',shell);input.focus();input.setSelectionRange?.(start,end);}},180);}
   for(const el of [shell,switchbar])el.addEventListener('input',handleInput);
-  window.addEventListener('keydown',e=>{const el=e.target;if(e.isComposing||e.keyCode===229||!(el?.dataset?.connection||el?.id==='a-top-name'))return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();el.value=el.defaultValue;clearPendingField(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='已取消輸入';el.blur();inlineTop();}else if(e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();el.blur();}},true);
+  window.addEventListener('keydown',e=>{const el=e.target;if(e.isComposing||e.keyCode===229||!(el?.dataset?.connection||el?.dataset?.net||el?.dataset?.assign||el?.id==='a-top-name'))return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();el.value=el.defaultValue;clearPendingField(el);window.WIUTextEditing?.reset(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='已取消輸入';el.blur();inlineTop();}else if(e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();el.blur();}},true);
   window.addEventListener('fullscreenchange',()=>{if(window.WIUPresentation?.isOpen())return;document.body.classList.toggle('r82-fullscreen',!!document.fullscreenElement);const button=$('[data-action="graph-fullscreen"]',shell);if(button)button.textContent='⛶ 全螢幕看圖 F5';const exit=$('[data-fullscreen-exit]',shell);if(exit)exit.hidden=!(document.fullscreenElement||graphFocus);applyGraphZoom();});
   function applyWireField(el){
     if(el.value===el.defaultValue){el.removeAttribute('aria-invalid');clearPendingField(el);el.readOnly=true;delete el.dataset.wireEditing;return true;}
-    try{const match=/^([A-Za-z_$][\w$]*)\s*(\[[^\]\r\n]+:[^\]\r\n]+\])?$/.exec(el.value.trim());if(!match)throw Error('請輸入 wire_name 或 wire_name[MSB:LSB]。');const trial=A.clone(project),net=trial.nets.find(n=>n.name===el.dataset.wireName);if(!net)throw Error('找不到目前編輯的 net。');A.renameNet(trial,net.id,match[1]);net.range=match[2]||'';trial.orgEdited=true;clearPendingField(el);el.readOnly=true;delete el.dataset.wireEditing;commit(()=>{project=trial;},'已更新 wire；相連端點同步改名。');el.defaultValue=el.value;el.removeAttribute('aria-invalid');el.readOnly=true;delete el.dataset.wireEditing;return true;}catch(error){el.readOnly=false;el.dataset.wireEditing='true';el.setAttribute('aria-invalid','true');setPendingField(el);toast(error.message+' 輸入已保留；請修正後按 Enter，或 Esc 取消。');return false;}
+    try{const match=/^([A-Za-z_$][\w$]*)\s*(\[[^\]\r\n]+:[^\]\r\n]+\])?$/.exec(el.value.trim());if(!match)throw Error('請輸入 wire_name 或 wire_name[MSB:LSB]。');const trial=A.clone(project),net=trial.nets.find(n=>n.name===el.dataset.wireName);if(!net)throw Error('找不到目前編輯的 net。');const value=window.WIUInteractionR128.wireValue(el.value,net.range);C.parseRange(C.expandDefines(value.range,trial),topContext());A.renameNet(trial,net.id,value.name);net.range=value.range;trial.orgEdited=true;clearPendingField(el);el.defaultValue=value.name+value.range;el.value=el.defaultValue;window.WIUTextEditing?.reset(el);el.readOnly=true;delete el.dataset.wireEditing;commit(()=>{project=trial;},'已更新 wire；相連端點同步改名。');el.defaultValue=el.value;el.removeAttribute('aria-invalid');el.readOnly=true;delete el.dataset.wireEditing;return true;}catch(error){el.readOnly=false;el.dataset.wireEditing='true';el.setAttribute('aria-invalid','true');setPendingField(el);toast(error.message+' 輸入已保留；請修正後按 Enter，或 Esc 取消。');return false;}
   }
-  function cancelWireField(el){el.value=el.defaultValue;el.removeAttribute('aria-invalid');clearPendingField(el);el.readOnly=true;delete el.dataset.wireEditing;el.blur();}
-  shell.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||!e.target.matches('[data-wire-name]')||e.target.readOnly)return;if(e.key==='Escape'){e.preventDefault();cancelWireField(e.target);e.stopImmediatePropagation();}if(e.key==='Enter'){e.preventDefault();if(applyWireField(e.target))e.target.blur();e.stopImmediatePropagation();}},true);
+  function cancelWireField(el){el.value=el.defaultValue;el.removeAttribute('aria-invalid');clearPendingField(el);window.WIUTextEditing?.reset(el);el.readOnly=true;delete el.dataset.wireEditing;el.blur();}
+  shell.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||!e.target.matches('[data-wire-name]')||e.target.readOnly)return;if(e.key==='Escape'){e.preventDefault();cancelWireField(e.target);e.stopImmediatePropagation();}if(e.key==='Enter'||e.key==='Tab'){if(e.key==='Enter')e.preventDefault();if(applyWireField(e.target))e.target.blur();else e.preventDefault();e.stopImmediatePropagation();}},true);
   function handleChange(e){safe(()=>{const el=e.target;
+    if(el.dataset.layoutWidth){const width=Number(el.value);if(!Number.isFinite(width)||width<580||width>20000)throw Error('寬度需介於 580 與 20000。');changeInstanceLayout(el.dataset.layoutWidth,{width});return;}
     if(el.id==='r95-instance-select'){selectGraphInstance(el.value);return;}
     if(el.dataset.topStyle){commit(()=>{project.workbook.topStyle={...window.WIUDiagramStyle.settings(project),[el.dataset.topStyle]:el.value};});return;}
     if(el.dataset.groupColor){commit(()=>{const st=window.WIUDiagramStyle.settings(project);st.colors={...st.colors,[el.dataset.groupColor]:el.value};project.workbook.topStyle=st;});return;}
@@ -1540,10 +1603,10 @@
     else if(el.id==='a-unbound'){onlyUnbound=el.checked;render();}
     else if(el.id==='a-select-all'){const keys=$$('[data-pin-select]',shell).map(i=>i.dataset.pinSelect);keys.forEach(k=>el.checked?selected.add(k):selected.delete(k));render();}
     else if(el.dataset.pinSelect){el.checked?selected.add(el.dataset.pinSelect):selected.delete(el.dataset.pinSelect);if(el.checked)focusedPin=el.dataset.pinSelect;render();}
-    else if(el.dataset.connection){if(el.value===el.defaultValue){clearPendingField(el);return;}const r=A.pinRows(project).find(r=>r.key===el.dataset.connection);if(!r)return;const expr=el.value.trim()||null;clearPendingField(el);if(r.expr!==expr)commit(()=>{A.applyConnections(project,[{instance:r.instance,port:r.port.name,expr}]);project.orgEdited=true;},null,{label:'修改 '+r.instanceName+'.'+r.port.name+' 綁定'});el.defaultValue=el.value;const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent=expr===null?'未設定（不是刻意不接）':'已套用';const mode=el.closest('td')?.querySelector('[data-binding-mode]');if(mode)mode.value=HF.bindingKind(expr);}
+    else if(el.dataset.connection){if(el.value===el.defaultValue){clearPendingField(el);return;}const r=A.pinRows(project).find(r=>r.key===el.dataset.connection);if(!r)return;const expr=el.value.trim()||null;clearPendingField(el);if(r.expr!==expr)commit(()=>{A.applyConnections(project,[{instance:r.instance,port:r.port.name,expr}]);project.orgEdited=true;},null,{label:'修改 '+r.instanceName+'.'+r.port.name+' 綁定'});el.defaultValue=el.value;window.WIUTextEditing?.reset(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent=expr===null?'未設定（不是刻意不接）':'已套用';const mode=el.closest('td')?.querySelector('[data-binding-mode]');if(mode)mode.value=HF.bindingKind(expr);}
     else if(el.dataset.bindingMode){const r=A.pinRows(project).find(r=>r.key===el.dataset.bindingMode);if(!r)return;const mode=el.value;el.value=HF.bindingKind(r.expr);if(mode==='net'){$('[data-connection="'+CSS.escape(r.key)+'"]',shell)?.focus();toast('輸入 net 或運算式；Enter／Tab 套用，Esc 取消。');return;}if(mode==='constant'){constantForm(new Set([r.key]),HF.bindingKind(r.expr)==='constant'?r.expr:"1'b0");return;}const expr=mode==='open'?'':null;if(expr===r.expr)return;if(mode==='open'&&r.port.direction==='input'){changePlan('確認刻意浮接輸入',[{instance:r.instance,port:r.port.name,expr}]);return;}commit(()=>{A.applyConnections(project,[{instance:r.instance,port:r.port.name,expr}]);project.orgEdited=true;},mode==='open'?'已設為刻意不接；可復原。':'已取消設定；此 pin 仍待處理。',{label:(mode==='open'?'刻意不接 ':'取消設定 ')+r.instanceName+'.'+r.port.name});}
-    else if(el.dataset.net){const n=project.nets.find(n=>n.id===el.dataset.net);try{commit(()=>{if(el.dataset.field==='name')A.renameNet(project,n.id,el.value.trim());else n[el.dataset.field]=el.type==='checkbox'?el.checked:el.value.trim();project.orgEdited=true;});}catch(err){render();throw err;}}
-    else if(el.dataset.assign){commit(()=>{project.assigns.find(a=>a.id===el.dataset.assign)[el.dataset.field]=el.value.trim();project.orgEdited=true;});}
+    else if(el.dataset.net){if(el.type!=='checkbox'&&el.value===el.defaultValue){clearPendingField(el);return;}const n=project.nets.find(n=>n.id===el.dataset.net);try{commit(()=>{if(el.dataset.field==='name')A.renameNet(project,n.id,el.value.trim());else n[el.dataset.field]=el.type==='checkbox'?el.checked:el.value.trim();project.orgEdited=true;});el.defaultValue=el.value;el.removeAttribute('aria-invalid');clearPendingField(el);window.WIUTextEditing?.reset(el);}catch(err){el.setAttribute('aria-invalid','true');setPendingField(el);throw err;}}
+    else if(el.dataset.assign){if(el.value===el.defaultValue){clearPendingField(el);return;}commit(()=>{project.assigns.find(a=>a.id===el.dataset.assign)[el.dataset.field]=el.value.trim();project.orgEdited=true;});el.defaultValue=el.value;clearPendingField(el);window.WIUTextEditing?.reset(el);}
     else if(el.dataset.format)commit(()=>{project.formats=el.checked?[...new Set(project.formats.concat(el.dataset.format))]:project.formats.filter(f=>f!==el.dataset.format);project.orgEdited=true;});
     else if(el.id==='a-advanced'||el.id==='a-prelude')commit(()=>{project[el.id==='a-advanced'?'advanced':'prelude']=el.value;project.orgEdited=true;});
     }finally{quietEdit=false;}

@@ -47,8 +47,8 @@ function nudge(pts,axis,index,offset){const p=pts.map(x=>({...x}));if(axis==='x'
 function safeDetour(edge,scene,occupied,blocks){
  const source=scene.points[edge.source],target=scene.points[edge.target];if(!source||!target)return null;
  const margin=36,srcBlock=source.instance?blocks.find(b=>b.id===source.instance):null,dstBlock=target.instance?blocks.find(b=>b.id===target.instance):null;
- const from=srcBlock?{x:source.x+(source.side==='left'?-margin:margin),y:source.y}:{x:source.x,y:source.y};
- const to=dstBlock?{x:target.x+(target.side==='left'?-margin:margin),y:target.y}:{x:target.x,y:target.y};
+ const from=srcBlock?(root.WIUInstanceLayout||(typeof require==='function'?require('./instance-layout'):null)).escape(source,margin):{x:source.x,y:source.y};
+ const to=dstBlock?(root.WIUInstanceLayout||(typeof require==='function'?require('./instance-layout'):null)).escape(target,margin):{x:target.x,y:target.y};
  const forceShared=Number.isFinite(edge.sharedTrunkX)&&source.outerSide==='left'&&edge.sharedFanout;
  const root=forceShared?{x:edge.sharedTrunkX,y:source.y}:from;
  const blockPad=27;

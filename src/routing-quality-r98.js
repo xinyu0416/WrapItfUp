@@ -4,6 +4,7 @@
  * A route leaves each pad in its outward direction before the first bend.
  */
 (function(root){'use strict';
+const IL=root.WIUInstanceLayout||(typeof require==='function'?require('./instance-layout'):null);
 const PAD_WIDTH=14, MOAT=2*PAD_WIDTH, ESCAPE=MOAT+12, EPS=.001;
 const SP=root.WIURoutingSpacingR98||(typeof require==='function'?require('./routing-spacing-r98'):null);
 const round=n=>Math.round(n*1000)/1000;
@@ -48,9 +49,7 @@ function valid(pts,edge,scene,ctx){
  const {blocks,moats,pads,top}=ctx;const src=scene.points[edge.source],dst=scene.points[edge.target];
  if(!pts||pts.length<2||!src||!dst||!same(pts[0],src)||!same(pts.at(-1),dst))return false;
  if(pts.some((p,i)=>i&&(!ortho(pts[i-1],p)||same(pts[i-1],p))))return false;
- const v0=sideVector(src.side),v1=sideVector(dst.side);
- if(v0&&(!eq(pts[1].y,src.y)||Math.sign(pts[1].x-src.x)!==v0||Math.abs(pts[1].x-src.x)+EPS<MOAT))return false;
- if(v1&&(!eq(pts.at(-2).y,dst.y)||Math.sign(pts.at(-2).x-dst.x)!==v1||Math.abs(pts.at(-2).x-dst.x)+EPS<MOAT))return false;
+ for(const [p,q] of [[src,pts[1]],[dst,pts.at(-2)]]){const [dx,dy]=IL.vector(p.side);if(dx&&(!eq(q.y,p.y)||(q.x-p.x)*dx+EPS<MOAT)||dy&&(!eq(q.x,p.x)||(q.y-p.y)*dy+EPS<MOAT))return false;}
  for(let i=1;i<pts.length-1;i++){
   const p=pts[i],a=pts[i-1],b=pts[i+1];if((eq(a.x,p.x))===(eq(p.x,b.x)))continue;
   if(p.x<top.left+MOAT-EPS||p.x>top.right-MOAT+EPS||p.y<top.top+MOAT-EPS||p.y>top.bottom-MOAT+EPS)return false;
@@ -85,7 +84,7 @@ function jumpTurnConflict(p,net,used){
 function hasJumpTurnConflict(points,net,used){return points.slice(1,-1).some(p=>jumpTurnConflict(p,net,used));}
 function resolve(edge,scene,ctx,used){
  const src=scene.points[edge.source],dst=scene.points[edge.target];
- if(!src||!dst||!sideVector(src.side)||!sideVector(dst.side))return null;
+ if(!src||!dst)return null;
  // Top-to-Top alias wires sharing a source must branch after exactly the
  // mandatory 28-unit pad escape, rather than overlaying unrelated signals
  // on a 40/54-unit generic stub. This remains a true route, not a waiver.
@@ -96,8 +95,8 @@ function resolve(edge,scene,ctx,used){
   if(valid(direct,edge,scene,ctx)&&!segs(direct).some(s=>SP.collides(s,edge,usedTop,scene)))return direct;
  }
  const forced=Number.isFinite(edge.sharedTrunkX)&&edge.sharedFanout&&src.outerSide==='left'&&src.side==='right';
- const first=forced?point(edge.sharedTrunkX,src.y):point(src.x+sideVector(src.side)*ESCAPE,src.y);
- const last=point(dst.x+sideVector(dst.side)*ESCAPE,dst.y);
+ const first=forced?point(edge.sharedTrunkX,src.y):IL.escape(src,ESCAPE);
+ const last=IL.escape(dst,ESCAPE);
  const rootPart=forced?[point(src.x,src.y),first]:[point(src.x,src.y),first];
  // A common Top-entry trunk must stay identical across all fanout sinks.
  if(!validLead(rootPart[0],rootPart[1],edge,scene,ctx,src.instance))return null;
@@ -152,7 +151,7 @@ function resolve(edge,scene,ctx,used){
  return valid(pts,edge,scene,ctx)&&!segs(pts).some(s=>SP.collides(s,edge,usedIndex,scene))?pts:null;
 }
 function validLead(a,b,edge,scene,ctx,owner){
- if(!eq(a.y,b.y)||!ortho(a,b))return false;
+ if(!ortho(a,b))return false;
  for(const block of ctx.blocks){if(block.id===owner)continue;if(rectHits(a,b,inflate(block,MOAT)))return false;}
  for(const p of ctx.pads){if(p.id===edge.source||p.id===edge.target||p.instance)continue;if(rectHits(a,b,{x:p.x-9,y:p.y-9,w:18,h:18}))return false;}
  return true;

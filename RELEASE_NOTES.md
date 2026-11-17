@@ -1,5 +1,69 @@
 # WrapItfUp release notes / 版本紀錄
 
+## Public r130 — 2026-11-17
+
+### 繁體中文
+
+依實際大型專案修正 r129 仍會背景逾時與一次建立全部 SVG／操作區的問題。
+
+- 超過 200 筆 binding 的互動圖面採有限候選避障路徑與有上限的備援搜尋。停止在每次開圖時自動進行高成本的全圖線距／轉角修復，保留完整檢查及按需精細修復。
+- 超過 400 個端點的畫布只建立視窗附近元素，保留跨越視窗的線；低於 35% 縮放顯示總覽。放大、平移和搜尋會恢復接腳與線名編輯。
+- 完整 scene、接線模型及匯出不裁切。修正畫面外搜尋定位，保留未提交的線名草稿，編輯中避免視窗重建。
+- 立即匯出 VBS 也使用背景完成的受檢圖面，補齊 Worker 保存專案所需的 Empty 設定正規化依賴。
+- 78 項測試、完整 build／audit／offline build；實際專案保存前後電氣資料與 RTL 預覽逐字相同。原有 46 項未設定接腳錯誤保持不變，未宣稱可通過工作包匯出或公司工具驗證。
+
+實測與限制見 [r130 驗證紀錄](docs/VERIFICATION-r130.md)。精細排線品質仍有改善空間；此版沒有把圖面衝突隱藏或算作通過。
+
+### English
+
+Dense interactive diagrams now use bounded candidate routing, keep full final checks and defer expensive global repair until requested. Viewport culling and zoom-dependent overview controls reduce DOM/painting work without trimming the model or exports. Offscreen search, inline drafts, pan/zoom restoration and immediate background VBS export are covered. A supplied design's routing completed in 2.3–2.9 seconds instead of timing out at 30 seconds in r129. Its electrical model and RTL preview remained identical after browser save; existing unconfigured pins still block normal export. See the report for scope, measurements and untested external tools.
+
+## Public r129 — 2026-11-17
+
+### 繁體中文
+
+修正 Top 接線圖將避障、線距修復、交叉分析全部同步跑在操作執行緒，以及新增尚未使用的子模組仍讓全圖快取失效的問題。
+
+- 先顯示可編輯的快速圖面；完整幾何計算交給本機背景 Worker。進度顯示目前階段，可暫停或重試。切頁取消計算，連續修改淘汰舊結果。
+- 圖面快取只依 Top 用到的介面與圖面資料更新；新增未使用子模組直接進入介面編輯，不先重畫隱藏 Top。
+- 路徑搜尋使用穩定優先佇列；大型圖面先限制自動修復的工作量，但仍檢查全部線路、保留所有衝突提醒。額外修復由「排列與走線」明確啟動。
+- 自動背景工作 30 秒、明確的排列／VBS 工作 120 秒上限。逾時保留可操作的預覽並顯示未完成，不回到前景硬算。
+- 背景結果是衍生圖面資料，不直接寫入 Undo 文件；保存／匯出把圖面快照附到副本，避免背景完成後阻斷復原。
+- VBS 在背景完成正式圖面後下載；快速預覽不會冒充圖面檢查通過。RTL／工作包仍使用原有接線與產生器。
+- 原有 r128 及更早的 frozen route 快照持續可讀。
+
+實測及限制見 [r129 驗證紀錄](docs/VERIFICATION-r129.md)。這次沒有執行公司 gen_top、ASIC／FPGA 編譯、模擬或 Windows Visio。
+
+### English
+
+Top geometry now runs in a cancellable local worker while an interactive preview remains available. Cache keys exclude unused module definitions and source/delivery-only changes. New module sheets open without reconstructing the hidden Top. Stable heap routing replaces repeated frontier sorting. Dense graphs receive bounded automatic repair with full final geometry checks and all unresolved warnings retained; additional repair is explicit. Automatic jobs stop after 30 seconds; explicit layout/export jobs after 120 seconds.
+
+Derived scenes stay outside the undoable document. Saving/exporting attaches a checked snapshot to a copy. Stale jobs cannot overwrite later edits. Quick scenes are never certified/exported as final VBS. Existing electrical data, generators, offline delivery and legacy snapshots remain supported. See the verification report for measured results and untested external environments.
+
+## Public r128 — 2026-11-17
+
+### 繁體中文
+
+此版由可核對的 r126 原始碼重建。先前 r127 的可下載成品與完整原始碼未能取回，因此不宣稱還原原 r127。
+
+- 圖面名稱、位寬與註解使用同一個原位編輯流程；確認後才更新設計。避免前一欄失焦重畫吞掉下一次點擊，保留錯誤草稿與游標。
+- 修正欄位攔住後續 Ctrl+Z 的情況；文字歷史與專案歷史依目前狀態交接。Enter／Tab 及 Shift 反向換列／換欄。
+- 工具列提供可持續使用的「多選」與清除選取；名稱最末端數字自動遞增，保留補零並跳過衝突。
+- Top wire 點擊文字即可編輯；只改名稱會保留位寬，同步更新綁定、assign 與 Empty 引用。錯誤輸入在重畫後仍可修正。
+- 每個 instance 可切換一般方塊／底部水平長條，寬度依其他 blocks 展開。按連接對象分區，水平訊號名稱，上／下緣 pin 可調整，分區可收合；保存與復原包含版型資料。個別 wires 仍保持獨立，不將不同訊號合併成一條 bus。
+- 補齊四向 pin 的走線逃離方向與下緣安全空間；保留既有一般方塊。
+- 附不含公司資料的 ControlBar 五實例範例。
+
+驗證與限制見 [r128 驗證紀錄](docs/VERIFICATION-r128.md)。公司案例的 gen_top 執行、ASIC／FPGA 正常／Empty 編譯與模擬，以及 Windows Visio 實際執行，均未在此環境重跑。
+
+### English
+
+Rebuilt from verified r126 source; the prior r127 artifact/source could not be recovered. This release does not claim to restore the missing build.
+
+Unified in-place canvas editing, stable focus/caret, invalid-draft recovery, repeated undo/redo handoff, persistent multi-select, final-digit name incrementing, and direct wire renaming with range/reference preservation. Per-instance bottom horizontal bars group pins by connected instance, retain horizontal labels, support top/bottom pin placement and independent disclosure, and persist/undo presentation metadata separately from electrical data. Four-sided routing includes a bottom escape corridor. A generic controller/four-channel example is included.
+
+See the verification report for regression and browser evidence. Company gen_top execution, ASIC/FPGA normal/Empty compile/simulation and actual Windows Visio execution were not rerun here.
+
 ## Public r126 — 2026-11-15
 
 ### 繁體中文

@@ -1,0 +1,417 @@
+{
+  "format": "WrapItfUp",
+  "schemaVersion": 1,
+  "appVersion": "128",
+  "scope": "project",
+  "origin": "user",
+  "project": {
+    "schema": 1,
+    "top": "ControlBarTop",
+    "modules": [
+      {
+        "name": "ChannelPort",
+        "ports": [
+          {
+            "name": "req",
+            "direction": "input",
+            "range": "[WIDTH-1:0]",
+            "signed": false,
+            "comment": "",
+            "id": "w_t8bq8wz6sk"
+          },
+          {
+            "name": "ready",
+            "direction": "output",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_69o8f8stgu"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "WIDTH",
+            "value": "8",
+            "type": "",
+            "local": false,
+            "source": "WIDTH=8"
+          }
+        ],
+        "source": "module ChannelPort #(parameter WIDTH=8)(input [WIDTH-1:0] req, output ready); assign ready=|req; endmodule",
+        "issues": [],
+        "originalSource": "module ChannelPort #(parameter WIDTH=8)(input [WIDTH-1:0] req, output ready); assign ready=|req; endmodule\n",
+        "sourceFilename": "ChannelPort.v",
+        "filename": "ChannelPort.v",
+        "preprocessKey": "{\"rows\":[],\"includes\":[],\"fileName\":\"wiu_defines.vh\"}",
+        "includeDependencies": [],
+        "id": "w_51yabn5hu2"
+      },
+      {
+        "name": "ControlReg",
+        "ports": [
+          {
+            "name": "req_p0",
+            "direction": "output",
+            "range": "[7:0]",
+            "signed": false,
+            "comment": "",
+            "id": "w_tfmtbaxq6b"
+          },
+          {
+            "name": "req_p1",
+            "direction": "output",
+            "range": "[7:0]",
+            "signed": false,
+            "comment": "",
+            "id": "w_46qlrq6joi"
+          },
+          {
+            "name": "req_p2",
+            "direction": "output",
+            "range": "[7:0]",
+            "signed": false,
+            "comment": "",
+            "id": "w_jxrdme17ch"
+          },
+          {
+            "name": "req_p3",
+            "direction": "output",
+            "range": "[7:0]",
+            "signed": false,
+            "comment": "",
+            "id": "w_j3diz3war7"
+          },
+          {
+            "name": "ready_p0",
+            "direction": "input",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_1k173toyg0"
+          },
+          {
+            "name": "ready_p1",
+            "direction": "input",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_9pe6h5pysh"
+          },
+          {
+            "name": "ready_p2",
+            "direction": "input",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_p1cex255o5"
+          },
+          {
+            "name": "ready_p3",
+            "direction": "input",
+            "range": "",
+            "signed": false,
+            "comment": "",
+            "id": "w_k3btlrz1yh"
+          }
+        ],
+        "parameters": [],
+        "source": "module ControlReg(output [7:0] req_p0, req_p1, req_p2, req_p3, input ready_p0, ready_p1, ready_p2, ready_p3); assign req_p0=8'd1; assign req_p1=8'd2; assign req_p2=8'd3; assign req_p3=8'd4; endmodule",
+        "issues": [],
+        "originalSource": "module ControlReg(output [7:0] req_p0, req_p1, req_p2, req_p3, input ready_p0, ready_p1, ready_p2, ready_p3); assign req_p0=8'd1; assign req_p1=8'd2; assign req_p2=8'd3; assign req_p3=8'd4; endmodule\n",
+        "sourceFilename": "ControlReg.v",
+        "filename": "ControlReg.v",
+        "preprocessKey": "{\"rows\":[],\"includes\":[],\"fileName\":\"wiu_defines.vh\"}",
+        "includeDependencies": [],
+        "id": "w_x5jzgkbe01"
+      }
+    ],
+    "instances": [
+      {
+        "id": "port0",
+        "name": "channel_p0",
+        "module": "ChannelPort",
+        "parameters": {},
+        "nameBinding": {
+          "mode": "custom",
+          "lastGenerated": "channel_p0"
+        }
+      },
+      {
+        "id": "port1",
+        "name": "channel_p1",
+        "module": "ChannelPort",
+        "parameters": {},
+        "nameBinding": {
+          "mode": "custom",
+          "lastGenerated": "channel_p1"
+        }
+      },
+      {
+        "id": "port2",
+        "name": "channel_p2",
+        "module": "ChannelPort",
+        "parameters": {},
+        "nameBinding": {
+          "mode": "custom",
+          "lastGenerated": "channel_p2"
+        }
+      },
+      {
+        "id": "port3",
+        "name": "channel_p3",
+        "module": "ChannelPort",
+        "parameters": {},
+        "nameBinding": {
+          "mode": "custom",
+          "lastGenerated": "channel_p3"
+        }
+      },
+      {
+        "id": "reg",
+        "name": "control_reg",
+        "module": "ControlReg",
+        "parameters": {},
+        "nameBinding": {
+          "mode": "custom",
+          "lastGenerated": "control_reg"
+        }
+      }
+    ],
+    "nets": [
+      {
+        "id": "req_p0",
+        "name": "req_p0",
+        "range": "[7:0]",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "ready_p0",
+        "name": "ready_p0",
+        "range": "",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "req_p1",
+        "name": "req_p1",
+        "range": "[7:0]",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "ready_p1",
+        "name": "ready_p1",
+        "range": "",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "req_p2",
+        "name": "req_p2",
+        "range": "[7:0]",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "ready_p2",
+        "name": "ready_p2",
+        "range": "",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "req_p3",
+        "name": "req_p3",
+        "range": "[7:0]",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      },
+      {
+        "id": "ready_p3",
+        "name": "ready_p3",
+        "range": "",
+        "direction": "wire",
+        "signed": false,
+        "comment": "",
+        "group": ""
+      }
+    ],
+    "connections": [
+      {
+        "id": "req_p0_a",
+        "instance": "reg",
+        "port": "req_p0",
+        "expr": "req_p0"
+      },
+      {
+        "id": "req_p0_b",
+        "instance": "port0",
+        "port": "req",
+        "expr": "req_p0"
+      },
+      {
+        "id": "ready_p0_a",
+        "instance": "reg",
+        "port": "ready_p0",
+        "expr": "ready_p0"
+      },
+      {
+        "id": "ready_p0_b",
+        "instance": "port0",
+        "port": "ready",
+        "expr": "ready_p0"
+      },
+      {
+        "id": "req_p1_a",
+        "instance": "reg",
+        "port": "req_p1",
+        "expr": "req_p1"
+      },
+      {
+        "id": "req_p1_b",
+        "instance": "port1",
+        "port": "req",
+        "expr": "req_p1"
+      },
+      {
+        "id": "ready_p1_a",
+        "instance": "reg",
+        "port": "ready_p1",
+        "expr": "ready_p1"
+      },
+      {
+        "id": "ready_p1_b",
+        "instance": "port1",
+        "port": "ready",
+        "expr": "ready_p1"
+      },
+      {
+        "id": "req_p2_a",
+        "instance": "reg",
+        "port": "req_p2",
+        "expr": "req_p2"
+      },
+      {
+        "id": "req_p2_b",
+        "instance": "port2",
+        "port": "req",
+        "expr": "req_p2"
+      },
+      {
+        "id": "ready_p2_a",
+        "instance": "reg",
+        "port": "ready_p2",
+        "expr": "ready_p2"
+      },
+      {
+        "id": "ready_p2_b",
+        "instance": "port2",
+        "port": "ready",
+        "expr": "ready_p2"
+      },
+      {
+        "id": "req_p3_a",
+        "instance": "reg",
+        "port": "req_p3",
+        "expr": "req_p3"
+      },
+      {
+        "id": "req_p3_b",
+        "instance": "port3",
+        "port": "req",
+        "expr": "req_p3"
+      },
+      {
+        "id": "ready_p3_a",
+        "instance": "reg",
+        "port": "ready_p3",
+        "expr": "ready_p3"
+      },
+      {
+        "id": "ready_p3_b",
+        "instance": "port3",
+        "port": "ready",
+        "expr": "ready_p3"
+      }
+    ],
+    "assigns": [],
+    "formats": [
+      "disable_unconstraint_port",
+      "case_sensitive",
+      "constraint_port_order",
+      "keep_inst_port_order"
+    ],
+    "advanced": "",
+    "prelude": "",
+    "defineConfig": {
+      "fileName": "wiu_defines.vh",
+      "rows": [],
+      "includes": []
+    },
+    "rtlSources": [
+      {
+        "name": "ChannelPort.v",
+        "text": "module ChannelPort #(parameter WIDTH=8)(input [WIDTH-1:0] req, output ready); assign ready=|req; endmodule\n"
+      },
+      {
+        "name": "ControlReg.v",
+        "text": "module ControlReg(output [7:0] req_p0, req_p1, req_p2, req_p3, input ready_p0, ready_p1, ready_p2, ready_p3); assign req_p0=8'd1; assign req_p1=8'd2; assign req_p2=8'd3; assign req_p3=8'd4; endmodule\n"
+      }
+    ],
+    "workbook": {
+      "schema": 1,
+      "projectId": "w_rvp59fdwil",
+      "diagrams": {},
+      "recovered": [],
+      "graphPositions": {
+        "port0": {
+          "x": 800,
+          "y": 180
+        },
+        "port1": {
+          "x": 1450,
+          "y": 180
+        },
+        "port2": {
+          "x": 2100,
+          "y": 180
+        },
+        "port3": {
+          "x": 2750,
+          "y": 180
+        },
+        "reg": {
+          "x": 800,
+          "y": 525
+        }
+      },
+      "instanceLayouts": {
+        "reg": {
+          "shape": "bar",
+          "width": 2398
+        }
+      }
+    }
+  },
+  "workspace": {},
+  "savedAt": "2026-11-17T03:09:11.915Z",
+  "integrity": {
+    "algorithm": "crc32",
+    "value": "a5bd8a2e"
+  }
+}

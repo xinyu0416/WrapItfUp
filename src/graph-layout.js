@@ -5,6 +5,7 @@ function ports(project,module){
 }
 function layout(project){
  const D=root.WIUDiagramStyle||(typeof require==='function'?require('./diagram-style'):null),measure=(s,size=12)=>Array.from(String(s)).reduce((n,c)=>n+(c.charCodeAt(0)>255?1:.63)*size,0);
+ const IL=root.WIUInstanceLayout||(typeof require==='function'?require('./instance-layout'):null);
  const groups=[];const preliminary=project.instances.flatMap((instance,index)=>{
   const module=project.modules.find(m=>m.name===instance.module);if(!module)return [];
   const C=root.WIUCore||(typeof require==='function'?require('./assembly-core'):null),parameterRows=C.instanceParameterRows(project,instance).map(r=>({...r,text:r.name+' = '+(r.error?'?':r.value)+' · '+r.sourceLabel})),parameterHeight=parameterRows.length?parameterRows.length*21+18:0;
@@ -20,10 +21,11 @@ function layout(project){
     y+=32+lines.length*15;if(gid)gs.findLast(g=>g.side===side&&g.id===gid).bottom=y-8;
    });columns[side].height=y+16;
   }
-  return [{instance,module,sides,columns,parameterRows,parameterHeight,groups:gs,width:Math.ceil(half)*2+28,height:Math.max(columns.left.height,columns.right.height,140)}];
+  return [IL.bar(project,{instance,module,sides,columns,parameterRows,parameterHeight,groups:gs,width:Math.ceil(half)*2+28,height:Math.max(columns.left.height,columns.right.height,140)},measure)];
  });
- const families=[...new Set(preliminary.map(b=>b.module.id))],columnWidth=Math.max(480,...preliminary.map(b=>b.width)),ys=families.map(()=>130),outer=Math.max(290,...project.nets.filter(n=>n.direction!=='wire').map(n=>measure(n.name+(n.range||''))+42));
- return preliminary.map((b,index)=>{const col=families.indexOf(b.module.id),saved=project.workbook?.graphPositions?.[b.instance.id],x=Number.isFinite(saved?.x)?Math.max(350,saved.x):outer+520+col*(columnWidth+900),y=Number.isFinite(saved?.y)?Math.max(80,saved.y):ys[col];ys[col]=Math.max(ys[col],y+b.height+80);return {...b,x,y};});
+ const families=[...new Set(preliminary.map(b=>b.module.id))],columnWidth=Math.max(480,...preliminary.filter(b=>b.shape!=='bar').map(b=>b.width)),ys=families.map(()=>130),outer=Math.max(290,...project.nets.filter(n=>n.direction!=='wire').map(n=>measure(n.name+(n.range||''))+42));
+ const result=preliminary.map((b,index)=>{const col=families.indexOf(b.module.id),saved=project.workbook?.graphPositions?.[b.instance.id],x=Number.isFinite(saved?.x)?Math.max(350,saved.x):outer+520+col*(columnWidth+900),y=Number.isFinite(saved?.y)?Math.max(80,saved.y):ys[col];ys[col]=Math.max(ys[col],y+b.height+80);return {...b,x,y};});
+ let bottom=Math.max(130,...result.filter(b=>b.shape!=='bar').map(b=>b.y+b.height))+180;for(const b of result.filter(b=>b.shape==='bar'))if(!project.workbook?.graphPositions?.[b.instance.id]){b.x=Math.min(800,...result.filter(x=>x.shape!=='bar').map(x=>x.x));b.y=bottom;bottom+=b.height+180;}return result;
 }
 function move(project,id,x,y){if(!project.instances.some(i=>i.id===id))throw Error('找不到 instance');if(!Number.isFinite(x)||!Number.isFinite(y))throw Error('無效位置');project.workbook.graphPositions||={};project.workbook.graphPositions[id]={x:Math.max(350,Math.round(x)),y:Math.max(80,Math.round(y))};}
 function topPorts(project){return ports(project,root.WIUWorkbook.moduleOf(project,'top'));}

@@ -44,13 +44,13 @@ test('RTL import preserves parameter expressions and separate source bytes',()=>
  const r=P.parseRtl(text,{filename:'PublicUnit.v'});
  assert.equal(r.modules[0].name,'PublicUnit');assert.equal(r.modules[0].ports[1].range,'[WIDTH-1:0]');assert.equal(r.sources[0].text,text);
 });
-test('runtime files outside the explicit r126 change set retain their reviewed baseline hashes',()=>{
+test('runtime files outside the explicit r126/r130 change set retain their reviewed baseline hashes',()=>{
  const baseline=require('./source-baseline.json');
- const changed=new Set(['assembly-actions.js','assembly-core.js','assembly-company.js','assembly-ui.js','assembly-workflow-ui.js','delivery-transfer.js','workbook.js','workflow-r119.js','import-review-r118.js']);
+ const changed=new Set(['assembly-actions.js','assembly-core.js','assembly-company.js','assembly-ui.js','assembly-workflow-ui.js','delivery-transfer.js','workbook.js','workflow-r119.js','import-review-r118.js','editor.js','text-editing.js','graph-layout.js','graph-scene.js','routing-quality-r98.js','native-routing-r92.js','workbook-view.js','workspace-r116.js']);
  for(const file of baseline.files){if(changed.has(path.basename(file.path)))continue;const hash=crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file.path))).digest('hex');assert.equal(hash,file.sha256,file.path);}
 });
 test('offline bundle includes every source exactly once, in source order, with startup barrier',async()=>{
  const {bundle}=await import('../tools/build.mjs'),html=await bundle(),source=fs.readFileSync(path.join(root,'index.html'),'utf8');let last=-1;
  for(const match of source.matchAll(/<script[^>]*src="\.\/(src\/[^"]+)"/g)){const body=fs.readFileSync(path.join(root,match[1]),'utf8'),at=html.indexOf(body);assert.ok(at>last,match[1]);assert.equal(html.indexOf(body,at+body.length),-1,match[1]);last=at;}
- assert.match(html,/<body class="a-assembly" data-wiu-boot="loading">/);assert.ok(!html.includes('src="./src/'));assert.match(html,/Public r126/);
+ assert.match(html,/<body class="a-assembly" data-wiu-boot="loading">/);assert.ok(!html.includes('src="./src/'));assert.match(html,/Public r130/);
 });

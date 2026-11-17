@@ -61,3 +61,9 @@ Any future split of the large retained editor or CSS layers should be a separate
 `connection-review.js` proposes data-only candidates. Selecting a candidate does not modify the project; the combined preview is validated before one commit. Signedness and resolved widths are preserved. No ambiguous candidate or Top promotion is silently selected.
 
 The transfer wizard does not connect to Linux. Copy state is local; pasted receiver output establishes only a user-supplied receipt/hash confirmation. Generation and compilation/simulation remain unverified until separately executed. `startup.js` reveals the shell only after the editor/workspace has initialized.
+
+## r128 per-instance presentation
+
+`workbook.instanceLayouts[instanceId]` stores `shape`, minimum `width`, `pinSides` keyed by stable module-port ID, `compact`, and expanded group keys. This metadata does not modify module ports, instance parameter values, nets, assignments or bindings. Removing an instance clears its layout in the same undo patch. `instance-layout.js` computes four-sided geometry consumed by the shared scene and SVG/VBS exporters. Automatic routing reserves an outward corridor on every supported pin side.
+
+`interaction-r128.js` shares suffix allocation, range-preserving wire parsing and focus-preserving repaint scheduling. Pointer-down commits defer replacement until the click can reach its intended target; live diagram dragging continues to render immediately. Uncommitted field drafts remain separate from the serialized project and block save until corrected or cancelled.

@@ -1,21 +1,8 @@
 
 (()=>{
 window.addEventListener('keydown',cancelInlineDragOnEscape,true);
-// Names remain in their original canvas cells; invalid drafts never commit.
-window.addEventListener('keydown',e=>{
- const el=e.target;if(window.WIUAssemblyActive||!el.matches?.('.signal-card input[data-act="name"]')||el.readOnly||e.isComposing)return;
- if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();const edit=directNameEdits.get(el);if(edit){el.value=edit.original;el.dispatchEvent(new Event('input',{bubbles:true}));}el.blur();return;}
- if(!['Enter','Tab'].includes(e.key)||e.ctrlKey||e.metaKey||e.altKey)return;
- e.preventDefault();e.stopImmediatePropagation();const ref=directNameRef(el),result=ref&&canvasConflictState(ref,el.value);if(result?.error){directNameFeedback(el,result);return;}
- const info=excelFieldInfo(el),next=nextSignalId(info.side,info.id,e.shiftKey?-1:1);
- el.blur();finishActiveEditHistory();
- // Live typing can defer a card/spacer rebuild. Moving focus cancels the blur
- // timer, so finish that rebuild before resolving the next editable cell.
- clearTimeout(inlineCommitTimer);inlineCommitTimer=null;
- renderDiagram();applyPreviewTransform();
- if(next)focusExcelText(signalFieldElement(info.side,next,'name'),true);
- resetNativeViewportScroll();
-},true);
+// r128: all canvas text fields use the draft/commit handler below.
+
 
 const COLORS=["#68778c","#806596","#5d427c","#8c6f4e","#4f6382","#856d96"];
 
@@ -453,10 +440,11 @@ function inlineBlockTitleHtml(layout){const safe=blockTitleSafeMetrics(layout),c
 function inlineGroupHtml(g,which){const left=which==="left",item=groupById(which,g.groupId);if(!item)return "";const y=(g.y1+g.y2)/2-13,active=activeGroupId[which]===item.id,commented=isCommentedLabel(item.name),color=commented?"#9aa0a6":item.color,nameCell=`<div class="group-name-cell excel-label-cell"><div class="group-rich" aria-hidden="true">${styledNameHtml(item)}<\/div><input class="excel-text-label" data-inline-group-name value="${esc(item.name)}" spellcheck="false" title="Group Name · first click selects all · prefix // comments out the whole group"><\/div>`,dot=`<span class="group-dot" style="background:${color}"><\/span>`,del=`<button class="label-delete" data-inline-group-delete title="移除這層群組；接腳與其他層保留">×<\/button>`;return `<div class="inline-group-bracket ${which} ${commented?"commented-label":""}" style="left:${g.x}px;top:${g.y1}px;height:${Math.max(22,g.y2-g.y1)}px;--group-color:${color}"><\/div><div class="inline-group-label unified-label-card ${which} ${active?"active":""} ${commented?"commented-label":""}" data-inline-group="${item.id}" data-side="${which}" data-drop-group="${item.id}" style="left:${g.labelX}px;top:${y}px;width:${Math.max(g.labelW,118)}px;--group-color:${color}">${left?`${nameCell}${dot}${del}`:`${del}${dot}${nameCell}`}<\/div>`}
 function inlineConditionHtml(seg,which){const c=conditionById(which,seg.conditionId);if(!c)return "";const structured=Array.isArray(c.path)&&c.path.length>0,desc=structured?conditionDirectiveText(c):c.macro;const g=conditionGeometry(seg,which,which==="left"?ensureLayoutState().leftSignalX:ensureLayoutState().rightSignalX),y=(seg.y1+seg.y2)/2-13,active=activeConditionId[which]===c.id,commented=isCommentedLabel(c.macro),kind=c.kind==="ifndef"?"ifndef":"ifdef";return `<div class="inline-condition-bracket ${which} ${commented?"commented-label":""}" style="left:${g.x}px;top:${seg.y1}px;height:${Math.max(22,seg.y2-seg.y1)}px"><\/div><div class="inline-condition-label unified-label-card ${which} ${active?"active":""} ${commented?"commented-label":""}" data-inline-condition="${c.id}" data-side="${which}" data-drop-condition="${c.id}" style="left:${g.labelX}px;top:${y}px;width:${Math.max(g.labelW,132)}px"><button class="condition-kind-toggle" data-condition-kind-toggle ${structured?"disabled":""} title="${structured?"Imported condition branch path · preserved (edit in RTL source and re-import)":"Click to toggle ifdef / ifndef"}">&#96;${structured?c.path.at(-1).branch:kind}<\/button><div class="condition-name-cell excel-label-cell"><input class="excel-text-label" data-condition-macro value="${esc(desc)}" ${structured?"readonly":""} spellcheck="false" title="${structured?"完整層級分支："+esc(desc)+" · 修改請重新匯入 RTL，避免意外改變分支語意":"Macro Name · first click selects all · prefix // comments out this condition and its ports"}"><\/div><button class="label-delete" data-condition-delete title="Remove IFDEF/IFNDEF condition (signals stay)">×<\/button><\/div>`}
 function inlineEditorHtml(L,R,LG,RG,layout,h){const CL=commentLaneGeometry("left",L,layout.leftSignalX,true),CR=commentLaneGeometry("right",R,layout.rightSignalX,true),ELG=LG.map(g=>editorGroupGeometry(g,"left",L,layout.leftSignalX,CL)),ERG=RG.map(g=>editorGroupGeometry(g,"right",R,layout.rightSignalX,CR)),LC=conditionSegments("left",L),RC=conditionSegments("right",R);return `<div class="inline-editor-layer" id="inlineLayer" style="height:${h}px"><div class="inline-help">Excel edit: first click selects all · ←/→ places caret · Enter ↓ / Shift+Enter ↑ · Tab moves sideways · // comments out Name/Group/IFDEF/IFNDEF · drag ↕<\/div>${inlineBlockTitleHtml(layout)}${L.map(s=>inlineLengthHtml(s,"left",layout)).join("")}${R.map(s=>inlineLengthHtml(s,"right",layout)).join("")}${L.map(s=>inlineCardHtml(s,"left",layout.leftSignalX,inlineCardWidthForSignal(s),layout)).join("")}${R.map(s=>inlineCardHtml(s,"right",layout.rightSignalX,inlineCardWidthForSignal(s),layout)).join("")}${L.map(s=>inlineCommentHtml(s,"left",CL)).join("")}${R.map(s=>inlineCommentHtml(s,"right",CR)).join("")}${ELG.map(g=>inlineGroupHtml(g,"left")).join("")}${ERG.map(g=>inlineGroupHtml(g,"right")).join("")}${LC.map(g=>inlineConditionHtml(g,"left")).join("")}${RC.map(g=>inlineConditionHtml(g,"right")).join("")}<\/div>`}
-function renderInlineSelectionState(){for(const el of $$(".signal-card,.inline-gap,.line-length-editor,.signal-comment-editor")){const which=el.dataset.side,id=el.dataset.id;el.classList.toggle("selected",!!rowSelection[which]?.has(id))}refreshBitSelectionState();for(const el of $$(".inline-group-label")){el.classList.toggle("active",activeGroupId[el.dataset.side]===el.dataset.inlineGroup)}for(const el of $$(".inline-condition-label")){el.classList.toggle("active",activeConditionId[el.dataset.side]===el.dataset.inlineCondition)}}
+function renderInlineSelectionState(){const multi=$('#r128-multi');if(multi){multi.setAttribute('aria-pressed',String(multiSelectMode));multi.textContent='多選：'+(multiSelectMode?'開':'關');}for(const el of $$(".signal-card,.inline-gap,.line-length-editor,.signal-comment-editor")){const which=el.dataset.side,id=el.dataset.id;el.classList.toggle("selected",!!rowSelection[which]?.has(id))}refreshBitSelectionState();for(const el of $$(".inline-group-label")){el.classList.toggle("active",activeGroupId[el.dataset.side]===el.dataset.inlineGroup)}for(const el of $$(".inline-condition-label")){el.classList.toggle("active",activeConditionId[el.dataset.side]===el.dataset.inlineCondition)}}
 function bestResizeHandleRatio(rows,layout){const top=layout.blockY,bottom=layout.blockY+layout.blockHeight,ys=(rows||[]).filter(s=>!isSpacerSignal(s)&&s.y>top+16&&s.y<bottom-16).map(s=>s.y).sort((a,b)=>a-b),candidates=[top+28,bottom-28];for(let i=0;i<ys.length-1;i++)candidates.push((ys[i]+ys[i+1])/2);if(!ys.length)candidates.push((top+bottom)/2);let best=candidates[0],score=-1;for(const y of candidates){const d=ys.length?Math.min(...ys.map(v=>Math.abs(v-y))):999;if(d>score){score=d;best=y}}return Math.max(.10,Math.min(.90,(best-top)/Math.max(1,layout.blockHeight)))}
 function blockOverlayHtml(layout,L,R){const wy="50",ey="50";return `<div id="blockOverlay" class="block-overlay" style="--w-y:${wy}%;--e-y:${ey}%"><div class="resize-handle nw" role="button" tabindex="0" aria-label="調整區塊 nw（方向鍵；Shift 加速）" data-handle="nw" title="Resize width + height"><\/div><div class="resize-handle n" role="button" tabindex="0" aria-label="調整區塊 n（方向鍵；Shift 加速）" data-handle="n" title="Resize Block height"><\/div><div class="resize-handle ne" role="button" tabindex="0" aria-label="調整區塊 ne（方向鍵；Shift 加速）" data-handle="ne" title="Resize width + height"><\/div><div class="resize-handle e" role="button" tabindex="0" aria-label="調整區塊 e（方向鍵；Shift 加速）" data-handle="e" title="Resize Block width"><\/div><div class="resize-handle se" role="button" tabindex="0" aria-label="調整區塊 se（方向鍵；Shift 加速）" data-handle="se" title="Resize width + height"><\/div><div class="resize-handle s" role="button" tabindex="0" aria-label="調整區塊 s（方向鍵；Shift 加速）" data-handle="s" title="Resize Block height"><\/div><div class="resize-handle sw" role="button" tabindex="0" aria-label="調整區塊 sw（方向鍵；Shift 加速）" data-handle="sw" title="Resize width + height"><\/div><div class="resize-handle w" role="button" tabindex="0" aria-label="調整區塊 w（方向鍵；Shift 加速）" data-handle="w" title="Resize Block width"><\/div><\/div><div class="signal-rail-handle" data-rail-handle="left" title="Drag LEFT signal rail to change wire length">L ↔<\/div><div class="signal-rail-handle" data-rail-handle="right" title="Drag RIGHT signal rail to change wire length">↔ R<\/div>`}
-function renderDiagram(live=false){const L=signalLayout("left"),R=signalLayout("right"),LG=groupSegments("left",L),RG=groupSegments("right",R),LC=conditionSegments("left",L),RC=conditionSegments("right",R),layout=ensureLayoutState(),h=getCanvasHeight(),W=1950,bx=layout.blockX,br=bx+layout.blockWidth,by=layout.blockY,bh=layout.blockHeight,lineL=layout.leftSignalX,lineR=layout.rightSignalX,labelL=lineL-28,labelR=lineR+28,CL=commentLaneGeometry("left",L,lineL,false),CR=commentLaneGeometry("right",R,lineR,false),LGG=LG.map(g=>groupGeometry(g,"left",L,layout,CL)),RGG=RG.map(g=>groupGeometry(g,"right",R,layout,CR));previewMetrics={width:W,height:h};const lineColors=[...new Set([...L.map(s=>({s,which:"left"})),...R.map(s=>({s,which:"right"}))].filter(x=>!isSpacerSignal(x.s)).map(x=>signalIsCommented(x.which,x.s)?"#9aa0a6":lineColorOf(x.s)))],markerId=new Map(lineColors.map((c,i)=>[c,`arr${i}`])),markers=lineColors.map((c,i)=>`<marker id="arr${i}" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0 0L7 4L0 8z" fill="${c}"/><\/marker>`).join("");let out=`<svg id="diagramSvg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" preserveAspectRatio="xMidYMin meet" xmlns="http://www.w3.org/2000/svg"><defs>${markers}<\/defs><rect width="${W}" height="${h}" fill="#fff"/><rect x="${bx}" y="${by}" width="${layout.blockWidth}" height="${bh}" fill="#fff" stroke="#111" stroke-width="1.25"/>${moduleSvgText(layout)}`;
+function renderDiagram(live=false){if(live)return renderDiagramNow(true);return window.WIUInteractionR128.paint("diagram",()=>renderDiagramNow(false));}
+function renderDiagramNow(live=false){const L=signalLayout("left"),R=signalLayout("right"),LG=groupSegments("left",L),RG=groupSegments("right",R),LC=conditionSegments("left",L),RC=conditionSegments("right",R),layout=ensureLayoutState(),h=getCanvasHeight(),W=1950,bx=layout.blockX,br=bx+layout.blockWidth,by=layout.blockY,bh=layout.blockHeight,lineL=layout.leftSignalX,lineR=layout.rightSignalX,labelL=lineL-28,labelR=lineR+28,CL=commentLaneGeometry("left",L,lineL,false),CR=commentLaneGeometry("right",R,lineR,false),LGG=LG.map(g=>groupGeometry(g,"left",L,layout,CL)),RGG=RG.map(g=>groupGeometry(g,"right",R,layout,CR));previewMetrics={width:W,height:h};const lineColors=[...new Set([...L.map(s=>({s,which:"left"})),...R.map(s=>({s,which:"right"}))].filter(x=>!isSpacerSignal(x.s)).map(x=>signalIsCommented(x.which,x.s)?"#9aa0a6":lineColorOf(x.s)))],markerId=new Map(lineColors.map((c,i)=>[c,`arr${i}`])),markers=lineColors.map((c,i)=>`<marker id="arr${i}" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0 0L7 4L0 8z" fill="${c}"/><\/marker>`).join("");let out=`<svg id="diagramSvg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}" preserveAspectRatio="xMidYMin meet" xmlns="http://www.w3.org/2000/svg"><defs>${markers}<\/defs><rect width="${W}" height="${h}" fill="#fff"/><rect x="${bx}" y="${by}" width="${layout.blockWidth}" height="${bh}" fill="#fff" stroke="#111" stroke-width="1.25"/>${moduleSvgText(layout)}`;
   function drawSignal(s,left){if(isSpacerSignal(s))return;const which=left?"left":"right",edge=left?bx:br,outer=left?lineL:lineR,isInput=s.direction==="input",isInout=s.direction==="inout",startX=left?((isInput||isInout)?outer:edge):((isInput||isInout)?outer:edge),endX=left?((isInput||isInout)?edge:outer):((isInput||isInout)?edge:outer),bus=isBusBits(s.bits),busX=edge+(outer-edge)*0.62,nameX=left?edge+PORT_NAME_EDGE_PAD:edge-PORT_NAME_EDGE_PAD,nameY=s.y,commented=signalIsCommented(which,s),lineColor=commented?"#9aa0a6":lineColorOf(s),textColor=commented?"#8c939a":textColorOf(s),mid=markerId.get(lineColor)||"arr0",markerEnd=`url(#${mid})`,markerStart=isInout?markerEnd:"",next=nextDirection(s.direction),dirTitle=`${s.name||"signal"} · ${directionLabel(s.direction)} · 點線段選取；Shift 選取範圍`;const arrowTitle=`${s.name||"signal"} · ${directionLabel(s.direction)} → ${directionLabel(next)} · 點擊切換方向（可復原）`;const hitArrow=(x)=>`<circle class="dir-arrow-hit" role="button" tabindex="0" aria-label="${esc(arrowTitle)}" data-direction-toggle data-side="${which}" data-id="${s.id}" cx="${x}" cy="${s.y}" r="14"><title>${esc(arrowTitle)}<\/title><\/circle>`;const hitLine=`<line class="dir-line-hit" data-direction-toggle data-side="${which}" data-id="${s.id}" x1="${Math.min(edge,outer)}" x2="${Math.max(edge,outer)}" y1="${s.y}" y2="${s.y}"><title>${esc(dirTitle)}<\/title><\/line>`;out+=`<g><line class="signal-wire" x1="${startX}" x2="${endX}" y1="${s.y}" y2="${s.y}" stroke="${lineColor}" stroke-width="${bus?1.4:1.05}" ${markerStart?`marker-start="${markerStart}"`:""} marker-end="${markerEnd}"/><text x="${nameX}" y="${nameY}" text-anchor="${left?"start":"end"}" dominant-baseline="middle" class="sig" fill="${textColor}">${styledNameSvg(s)}<\/text>${bus?`<line x1="${busX-6}" x2="${busX+6}" y1="${s.y+6}" y2="${s.y-6}" stroke="${lineColor}" stroke-width="1.1"/><text x="${busX}" y="${s.y-11.5}" text-anchor="middle" class="bittext" fill="${textColor}">${esc(s.bits)}<\/text>`:""}${hitLine}${hitArrow(endX)}${isInout?hitArrow(startX):""}<\/g>`}
   function drawComment(s,left,lane){const c=commentDiagramText(s.comment,lane.width-12);if(!c||isSpacerSignal(s))return;const x=lane.x,color=signalIsCommented(left?"left":"right",s)?"#8c939a":"#555b63";out+=`<text x="${x}" y="${s.y}" text-anchor="start" dominant-baseline="middle" class="sig-comment" data-side="${left?"left":"right"}" data-id="${s.id}" fill="${color}">// ${esc(c)}<\/text>`}
   L.forEach(s=>drawSignal(s,true));R.forEach(s=>drawSignal(s,false));L.forEach(s=>drawComment(s,true,CL));R.forEach(s=>drawComment(s,false,CR));
@@ -464,7 +452,8 @@ function renderDiagram(live=false){const L=signalLayout("left"),R=signalLayout("
   for(const g of RGG){const item=groupById("right",g.groupId);out+=`<path class="grp-bracket" d="${bracketPath(g.x,g.y1,g.y2,false)}" fill="none" stroke="${isCommentedLabel(item?.name)?"#9aa0a6":g.color}" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="round"/><text x="${g.labelX}" y="${(g.y1+g.y2)/2}" text-anchor="start" dominant-baseline="middle" class="grp" fill="${isCommentedLabel(item?.name)?"#8c939a":g.color}">${styledNameSvg(item||g)}<\/text>`}  for(const seg of LC){const c=conditionById("left",seg.conditionId),g=conditionGeometry(seg,"left",lineL);if(!c)continue;out+=`<path d="${bracketPath(g.x,g.y1,g.y2,true)}" fill="none" stroke="${isCommentedLabel(c.macro)?"#9aa0a6":CONDITION_COLOR}" stroke-width="1.35" stroke-dasharray="4 3"/><text x="${g.labelX+g.labelW}" y="${(g.y1+g.y2)/2}" text-anchor="end" dominant-baseline="middle" class="cond" fill="${isCommentedLabel(c.macro)?"#8c939a":CONDITION_COLOR}">${esc(conditionText(c))}<\/text>`}
   for(const seg of RC){const c=conditionById("right",seg.conditionId),g=conditionGeometry(seg,"right",lineR);if(!c)continue;out+=`<path d="${bracketPath(g.x,g.y1,g.y2,false)}" fill="none" stroke="${isCommentedLabel(c.macro)?"#9aa0a6":CONDITION_COLOR}" stroke-width="1.35" stroke-dasharray="4 3"/><text x="${g.labelX}" y="${(g.y1+g.y2)/2}" text-anchor="start" dominant-baseline="middle" class="cond" fill="${isCommentedLabel(c.macro)?"#8c939a":CONDITION_COLOR}">${esc(conditionText(c))}<\/text>`}
   const hasLeftGroup=LGG.length>0,hasRightGroup=RGG.length>0,leftHasComments=L.some(s=>cleanComment(s.comment)),rightHasComments=R.some(s=>cleanComment(s.comment)),minLeftGroup=hasLeftGroup?Math.min(...LGG.map(g=>g.labelX-g.labelW-20)):labelL-100,maxRightGroup=hasRightGroup?Math.max(...RGG.map(g=>g.labelX+g.labelW+20)):labelR+100,leftCondGeo=LC.map(g=>conditionGeometry(g,"left",lineL)),rightCondGeo=RC.map(g=>conditionGeometry(g,"right",lineR)),minLeftCond=leftCondGeo.length?Math.min(...leftCondGeo.map(g=>g.labelX-8)):minLeftGroup,maxRightCond=rightCondGeo.length?Math.max(...rightCondGeo.map(g=>g.labelX+g.labelW+8)):maxRightGroup,minPX=Math.min(minLeftGroup,minLeftCond,leftHasComments?CL.x-14:minLeftGroup),maxPX=Math.max(maxRightGroup,maxRightCond,rightHasComments?CR.x+CR.width+14:maxRightGroup),minY=Math.max(0,Math.min(by,84)-26),maxY=Math.min(h,Math.max(by+bh,84+(Math.max(L.length,R.length)-1)*31)+30);presentationContentBounds={x:minPX,y:minY,width:maxPX-minPX,height:Math.max(120,maxY-minY)};const eCL=commentLaneGeometry("left",L,lineL,true),eCR=commentLaneGeometry("right",R,lineR,true),eLG=LG.map(g=>editorGroupGeometry(g,"left",L,lineL,eCL)),eRG=RG.map(g=>editorGroupGeometry(g,"right",R,lineR,eCR)),leftCards=L.filter(s=>!isSpacerSignal(s)).map(s=>layout.blockX+12),rightCards=R.filter(s=>!isSpacerSignal(s)).map(s=>layout.blockX+layout.blockWidth-12),editorMin=Math.min(minPX,...leftCards,leftHasComments?eCL.x:minPX,...eLG.map(g=>g.labelX-4)),editorMax=Math.max(maxPX,...rightCards,rightHasComments?eCR.x+eCR.width:maxPX,...eRG.map(g=>g.labelX+g.labelW+4));previewContentBounds={x:editorMin,y:minY,width:editorMax-editorMin,height:Math.max(120,maxY-minY)};const spacerCount=[...L,...R].filter(isSpacerSignal).length,visibleCount=L.length+R.length-spacerCount;out+="<\/svg>";out=sharedDiagramMarkup(out);mountDiagramMarkup(out+blockOverlayHtml(layout,L,R)+inlineEditorHtml(L,R,LG,RG,layout,h),live);$("#diagramCount").textContent=`${visibleCount} signals${spacerCount?` · ${spacerCount} gaps`:""}`;$("#qaState").textContent=`${selectedRowsAll().length?selectedRowsAll().length+" selected":"inline edit"}`;requestAnimationFrame(()=>previewView.fit?fitPreview():applyPreviewTransform());if(presentationOpen)refreshPresentationSvg();prepareCanvasLabels()}
-function render(){ensureLayoutState();$$('.tab').forEach(b=>b.classList.toggle("active",b.dataset.side===side));renderGroups();renderRows();renderDiagram();renderRtlDeclarations();save();updateHistoryUI();renderDesk();renderGroupPanel();refreshFindPanel()}
+function render(){return window.WIUInteractionR128.paint("sheet",renderNow);}
+function renderNow(){ensureLayoutState();$$('.tab').forEach(b=>b.classList.toggle("active",b.dataset.side===side));renderGroups();renderRows();renderDiagram();renderRtlDeclarations();save();updateHistoryUI();renderDesk();renderGroupPanel();refreshFindPanel()}
 function parsePaste(text,fallback,groupId){return text.split(/\r?\n/).filter(x=>x.trim()&&!/^\s*\/\//.test(x)).map(line=>{const parts=line.split(/\/\/(.*)/s),comment=cleanComment(parts[1]||""),raw=(parts[0]||"").trim();let t=raw.replace(/[;,]$/,""),range=t.match(/\[\s*([^:\]]+)\s*:\s*([^\]]+)\s*\]/),cols=t.split(/\t|\s{2,}/).filter(Boolean);let name=cols[0]||t,bits=cols[1]||"1";if(range){bits=`[${range[1].trim()}:${range[2].trim()}]`;name=t.replace(range[0],"").replace(/;.*$/," ").trim().split(/\s+/).at(-1)}else{const p=t.replace(/;.*$/," ").trim().split(/\s+/),last=p.at(-1)||"";if(/^(?:\d+(?:b|B|bit|bits|-bit)?|\[[^\]]+\])$/i.test(last)&&p.length>1){bits=p.pop();name=p.at(-1)}else name=p.at(-1)}const direction=/^inout\b/i.test(t)?"inout":/^output\b/i.test(t)?"output":/^input\b/i.test(t)?"input":fallback;name=String(name||"").replace(/^(input|output|inout|wire|logic|reg)\s+/i,"").replace(/;$/g,"");return signal(name,cleanBitsText(bits)||"1",direction,groupId,[],"#111b23","#050505",comment)})}
 function clearDropClasses(){$$("#rows tr").forEach(tr=>tr.classList.remove("drop-before","drop-after","dragging"));$$('[data-drop-group]').forEach(x=>x.classList.remove("drop-target"))}
 function commitReorder(){if(!dragId||!dropInfo)return false;const rows=state.signals[side],from=rows.findIndex(x=>x.id===dragId),target=rows.findIndex(x=>x.id===dropInfo.id);if(from<0||target<0||from===target)return false;const [moving]=rows.splice(from,1);let at=rows.findIndex(x=>x.id===dropInfo.id)+(dropInfo.before?0:1);rows.splice(at,0,moving);return true}
@@ -686,7 +675,7 @@ function finishInlinePointerDrag(e,cancel=false){
 previewCanvas?.addEventListener("pointerup",e=>finishInlinePointerDrag(e,false));
 previewCanvas?.addEventListener("pointercancel",e=>finishInlinePointerDrag(e,true));
 
-function applyPreviewTransform(){const tr=`translate3d(${previewView.x}px,${previewView.y}px,0) scale(${previewView.scale})`,svg=document.querySelector("#diagramSvg"),layer=document.querySelector("#inlineLayer");if(svg)svg.style.transform=tr;if(layer)layer.style.transform=tr;updateZoomReadout();updateBlockOverlay()}
+function applyPreviewTransform(){const tr=`translate3d(${previewView.x}px,${previewView.y}px,0) scale(${previewView.scale})`,svg=document.querySelector("#diagramSvg"),layer=document.querySelector("#inlineLayer");if(svg)svg.style.transform=tr;if(layer){layer.style.transform=tr;layer.style.setProperty('--r128-edit-scale',String(1/previewView.scale));}updateZoomReadout();updateBlockOverlay()}
 function fitPreview(){const c=document.querySelector("#canvas");if(!c)return;const r=c.getBoundingClientRect(),b=previewContentBounds,m=Math.max(8,Math.min(16,Math.min(r.width,r.height)*.016)),aw=Math.max(1,r.width-m*2),ah=Math.max(1,r.height-m*2),s=clampPreviewScale(Math.min(aw/b.width,ah/b.height));previewView={scale:s,x:(r.width-b.width*s)/2-b.x*s,y:(r.height-b.height*s)/2-b.y*s,fit:true};applyPreviewTransform()}
 function nudgePreview(dx,dy){previewView.fit=false;previewView.x+=dx;previewView.y+=dy;applyPreviewTransform()}
 function applyBlockResize(clientX,clientY){if(!blockResize)return;const s=blockResize.scale||1,dx=(clientX-blockResize.startX)/s,dy=(clientY-blockResize.startY)/s,h=blockResize.handle,start=blockResize.start,gap=DEFAULT_WIRE_MIN,minW=contentDrivenBlockMinWidth(state),maxW=1700;let x=start.blockX,y=start.blockY,w=start.blockWidth,hh=start.blockHeight;if(h.includes("e"))w=start.blockWidth+dx;if(h.includes("s"))hh=start.blockHeight+dy;if(h.includes("w")){x=start.blockX+dx;w=start.blockWidth-dx}if(h.includes("n")){y=start.blockY+dy;hh=start.blockHeight-dy}const leftLimit=120+gap,rightLimit=1830-gap;if(h.includes("w")){const right=start.blockX+start.blockWidth;x=Math.max(leftLimit,Math.min(x,right-minW));w=right-x}else if(h.includes("e"))w=Math.max(minW,Math.min(maxW,rightLimit-start.blockX,w));else{x=Math.max(leftLimit,Math.min(x,rightLimit-minW));w=Math.max(minW,Math.min(maxW,Math.min(w,rightLimit-x)))}state.layout={...state.layout,blockX:x,blockY:y,blockWidth:w,blockHeight:hh,leftSignalX:Math.min(start.leftSignalX,x-gap),rightSignalX:Math.max(start.rightSignalX,x+w+gap)};ensureLayoutState();renderDiagram(true);applyPreviewTransform();save()}
@@ -858,18 +847,8 @@ deskReady=true;$('#workbench').classList.toggle('signals-open',window.innerWidth
  * its name. Only a trusted local cut pasted back into the same sheet reuses IDs.
  */
 function portEditNotice(message){const modal=document.querySelector('dialog[open]');if(modal){let note=modal.querySelector('[data-inline-notice]');if(!note){note=document.createElement('p');note.dataset.inlineNotice='';note.className='r121-error';note.setAttribute('role','alert');(modal.querySelector('.a-dialog-content')||modal).append(note);}note.textContent=message;return;}if(window.WIUProjectHost?.portNotice)window.WIUProjectHost.portNotice(message);else toast(message);}
-function allocatePortNames(requested,occupied){
-  const used=new Set(occupied),reserved=new Set(requested.filter(n=>n&& !/^\s*\/\//.test(n)));
-  return requested.map(name=>{
-    if(!name||/^\s*\/\//.test(name))return name;
-    if(!used.has(name)){used.add(name);return name;}
-    const m=/^(.*)_([0-9]+)$/.exec(name);
-    const stem=m?m[1]:name;
-    let n=m?BigInt(m[2])+1n:2n,candidate;
-    do{candidate=stem+'_'+n++;}while(used.has(candidate)||reserved.has(candidate));
-    used.add(candidate);return candidate;
-  });
-}
+function allocatePortNames(requested,occupied){return window.WIUInteractionR128.allocateNames(requested,occupied);}
+
 function portClipboardScope(){return window.WIUProjectHost?.portEditContext?.()||{project:'legacy',module:state.moduleName,reserved:[],reason:''};}
 function portNamesInUse(excludeIds=[]){
   const excluded=new Set(excludeIds),names=[];
@@ -888,12 +867,12 @@ function portEditAllowed(){
 }
 function commitPortCreation(change){
   if(!portEditAllowed())return false;
-  finishActiveEditHistory();const before=snapshotState(),candidate=state;
+  finishActiveEditHistory();const before=snapshotState();
   try{withHistory(change);}
   catch(e){history.tx=null;state=normalizeProjectState(JSON.parse(before));render();portEditNotice(e.message);return false;}
   // The workbook bridge restores the previous sheet if parsing or applying fails.
   // Do not report success or select newly allocated IDs when that happens.
-  return state===candidate;
+  return snapshotState()!==before;
 }
 function reportPortCreation(action,created,renames=[]){
   const detail=renames.slice(0,3).map(x=>x.from+' → '+x.to).join('、');
@@ -1093,7 +1072,7 @@ function refreshPortSelection(){
 }
 function applyPortRangeSelection(refs,id,anchor,event={},toggle=false){
   const at=refs.findIndex(x=>x.sig.id===id);if(at<0)return anchor;
-  const ref=refs[at],start=refs.findIndex(x=>x.sig.id===anchor),add=event.ctrlKey||event.metaKey;
+  const ref=refs[at],start=refs.findIndex(x=>x.sig.id===anchor),add=event.ctrlKey||event.metaKey||multiSelectMode;
   if(event.shiftKey&&start>=0){
     if(!add)clearAllSelections();
     for(const x of refs.slice(Math.min(start,at),Math.max(start,at)+1))rowSelection[x.which].add(x.sig.id);
@@ -1127,7 +1106,7 @@ function portPointerTarget(target){
 }
 function handlePortModifierPointer(e){
   handlePortModifierPointer.pending=null;
-  if(e.button!==0||!(e.shiftKey||e.ctrlKey||e.metaKey))return;
+  if(e.button!==0||!(e.shiftKey||e.ctrlKey||e.metaKey||multiSelectMode))return;
   const hit=portPointerTarget(e.target);if(!hit)return;
   // Shift in the already focused text field still extends a text selection.
   if(e.shiftKey&&!e.ctrlKey&&!e.metaKey&&e.target===document.activeElement&&isEditableTarget(e.target))return;
@@ -1257,7 +1236,9 @@ function removeCanvasGroup(which,id){const g=groupById(which,id);for(const child
 /* Diagram text edits in its own field. Drafts commit only after validation.
  * There is no floating text dialog; model/history/export remain the owners. */
 let canvasEdit=null,canvasEditor=null,canvasContext=null;
-const directNameEdits=new WeakMap();
+const directNameEdits=new WeakMap(),canvasDrafts=new Map();
+let multiSelectMode=false;
+const canvasDraftKey=ref=>JSON.stringify([portClipboardScope().project,portClipboardScope().module,ref.kind,ref.which||'',ref.id]);
 function groupAutoWidth(item){return Math.max(118,Math.ceil(richNameMeasurePx(item)*1.14+62));}
 function sideGroupWidth(which){const widths=usedGroupLanes(which);return widths.reduce((a,w)=>a+w,0)+Math.max(0,widths.length-1)*36;}
 function groupGeometry(seg,which,laid,layout,lane){return editorGroupGeometry(seg,which,laid,which==='left'?layout.leftSignalX:layout.rightSignalX,lane);}
@@ -1291,13 +1272,13 @@ function inlineCanvasInput(ref){
  const selector={module:'[data-inline-module]',group:'[data-inline-group-name]',bits:'[data-line-length]',comment:'[data-act="comment"]',name:'[data-act="name"]'}[ref.kind];
  if(ref.anchor?.matches?.(selector))return ref.anchor;
  const fromAnchor=ref.anchor?.querySelector?.(selector);if(fromAnchor)return fromAnchor;
- return ref.kind==='module'?$('#inlineLayer [data-inline-module]'):ref.kind==='group'?$(`.inline-group-label[data-inline-group="${ref.id}"] [data-inline-group-name]`):ref.kind==='bits'?$(`.line-length-editor[data-side="${ref.which}"][data-id="${ref.id}"]`):$(`.signal-comment-editor[data-side="${ref.which}"][data-id="${ref.id}"] [data-act="comment"]`);
+ return ref.kind==='name'?signalFieldElement(ref.which,ref.id,'name'):ref.kind==='module'?$('#inlineLayer [data-inline-module]'):ref.kind==='group'?$(`.inline-group-label[data-inline-group="${ref.id}"] [data-inline-group-name]`):ref.kind==='bits'?$(`.line-length-editor[data-side="${ref.which}"][data-id="${ref.id}"]`):$(`.signal-comment-editor[data-side="${ref.which}"][data-id="${ref.id}"] [data-act="comment"]`);
 }
 function closeCanvasEditor(apply=false){
  if(!canvasEdit)return true;if(apply)return applyCanvasEditor();
  const ref=canvasEdit;canvasEdit=null;
  ref.input.value=ref.original;ref.input.removeAttribute('aria-invalid');ref.input.classList.remove('r84-invalid');
- ref.errorLabel?.remove();return true;
+ ref.errorLabel?.remove();canvasDrafts.delete(canvasDraftKey(ref));window.WIUTextEditing?.reset(ref.input);return true;
 }
 function canvasWidthPlan(value,values={}){return window.WIUProjectHost?.portWidthPlan(value,values);}
 function positionCanvasEditor(){
@@ -1309,6 +1290,7 @@ function refreshCanvasEditor(){
  ref.error='';ref.plan=null;
  try{
   const locked=['name','bits','module'].includes(ref.kind)&&portClipboardScope().reason;if(locked)throw Error(locked);
+  if(ref.kind==='name')ref.error=canvasConflictState(ref,input.value).error;
   if(ref.kind==='module')ref.error=window.WIUProjectHost?.moduleNameError(input.value)||'';
   if(ref.kind==='bits'){
    const plan=canvasWidthPlan(input.value);if(!plan)throw Error('位寬解析器尚未就緒。');ref.plan=plan;
@@ -1322,14 +1304,14 @@ function refreshCanvasEditor(){
 }
 function beginCanvasField(ref,input){
  if(canvasEdit?.input===input)return;
- if(canvasEdit&&!applyCanvasEditor()){closeCanvasEditor(false);portEditNotice('未套用的編輯已取消，保留原值。');}
+ if(canvasEdit&&!applyCanvasEditor()){canvasDrafts.set(canvasDraftKey(canvasEdit),{...canvasEdit,anchor:null,input:null,errorLabel:null,value:canvasEdit.input.value});canvasEdit.errorLabel?.remove();canvasEdit=null;portEditNotice('錯誤輸入已保留；修正或 Esc 取消後才能儲存。');}
  if(history.tx!==null)endHistory();const item=canvasItem(ref);if(!item)return;
  canvasEdit={...ref,input,original:input.value,scope:JSON.stringify([portClipboardScope().project,portClipboardScope().module]),targets:ref.kind==='bits'&&selectedRowsAll().some(x=>x.sig.id===ref.id)?selectedRowsAll().map(x=>x.sig.id):[ref.id]};
+ const draft=canvasDrafts.get(canvasDraftKey(ref));if(draft){input.value=draft.value;canvasEdit.original=ref.kind==='name'?item.name:draft.original;}
  refreshCanvasEditor();
 }
 function openCanvasEditor(ref){
  if(!ref||!canvasItem(ref))return;
- if(ref.kind==='name'){focusExcelText(signalFieldElement(ref.which,ref.id,'name'),true);return;}
  const input=inlineCanvasInput(ref);if(!input)return;
  input.readOnly=false;beginCanvasField(ref,input);input.focus({preventScroll:true});input.select();
 }
@@ -1339,24 +1321,26 @@ function applyCanvasEditor(){
  refreshCanvasEditor();if(canvasEdit.error)return false;
  const ref=canvasEdit,value=ref.input.value,plan=ref.plan;
  if(value===ref.original){closeCanvasEditor(false);return true;}
- canvasEdit=null;history.tx=null;ref.errorLabel?.remove();return commitCanvasField(ref,value,plan);
+ canvasEdit=null;history.tx=null;ref.errorLabel?.remove();canvasDrafts.delete(canvasDraftKey(ref));ref.input.defaultValue=value;window.WIUTextEditing?.reset(ref.input);return commitCanvasField(ref,value,plan);
 }
 // Capture draft input before the retained native handlers can mutate state.
 // Enter/Tab commits one history step, Escape cancels, blur commits valid text.
-function inlineCanvasRef(el){const ref=canvasFieldTarget(el);return ref&&ref.kind!=='name'&&el.matches?.('input,textarea')?ref:null;}
-function inlineCanvasNext(ref,step){
- if(!['bits','comment'].includes(ref.kind))return null;
- const id=nextSignalId(ref.which,ref.id,step);return id?{kind:ref.kind,which:ref.which,id}:null;
+function inlineCanvasRef(el){const ref=canvasFieldTarget(el);return ref&&el.matches?.('input,textarea')?ref:null;}
+function inlineCanvasNext(ref,step,tab=false){
+ if(!['name','bits','comment'].includes(ref.kind))return null;
+ const fs=['name','bits','comment'];let kind=ref.kind,id=ref.id;
+ if(tab){const next=fs.indexOf(kind)+step;if(next>=0&&next<fs.length)return {...ref,kind:fs[next],anchor:null};kind=step>0?'name':'comment';}
+ id=nextSignalId(ref.which,id,step);return id?{kind,which:ref.which,id}:null;
 }
 document.addEventListener('focusin',e=>{const ref=inlineCanvasRef(e.target);if(ref)beginCanvasField(ref,e.target);},true);
 document.addEventListener('input',e=>{const ref=inlineCanvasRef(e.target);if(!ref)return;e.stopImmediatePropagation();beginCanvasField(ref,e.target);refreshCanvasEditor();},true);
 document.addEventListener('change',e=>{if(inlineCanvasRef(e.target))e.stopImmediatePropagation();},true);
-document.addEventListener('blur',e=>{if(canvasEdit?.input===e.target)applyCanvasEditor();},true);
+document.addEventListener('blur',e=>{if(canvasEdit?.input===e.target&&!applyCanvasEditor()){canvasDrafts.set(canvasDraftKey(canvasEdit),{...canvasEdit,input:null,anchor:null,errorLabel:null,value:canvasEdit.input.value});}},true);
 window.addEventListener('keydown',e=>{
  const ref=inlineCanvasRef(e.target);if(!ref||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
  if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();closeCanvasEditor(false);e.target.blur();return;}
  if(!['Enter','Tab'].includes(e.key))return;
- e.preventDefault();e.stopImmediatePropagation();const next=inlineCanvasNext(ref,e.shiftKey?-1:1);
+ e.preventDefault();e.stopImmediatePropagation();const next=inlineCanvasNext(ref,e.shiftKey?-1:1,e.key==='Tab');
  if(!applyCanvasEditor())return;
  e.target.blur();if(next)openCanvasEditor(next);else previewCanvas.focus({preventScroll:true});
 },true);
@@ -1366,7 +1350,7 @@ function commitCanvasField(ref,value,plan=null){
   if(ref.kind==='name'){const result=canvasConflictState(ref,value);if(result.error){portEditNotice(result.error);return false;}}
   if(ref.kind==='module'){const error=window.WIUProjectHost?.moduleNameError(value);if(error){portEditNotice(error);return false;}}
   if(ref.kind==='bits'&&(!plan||plan.error||plan.missing.length)){portEditNotice('請先補齊位寬與參數。');return false;}
-  const before=snapshotState(),candidate=state;
+  const before=snapshotState();
   try{
     if(ref.kind==='bits'){
       for(const s of ['left','right'].flatMap(w=>state.signals[w]))if((ref.targets||[ref.id]).includes(s.id))s.bits=plan.range||'1';
@@ -1374,9 +1358,8 @@ function commitCanvasField(ref,value,plan=null){
     }else if(ref.kind==='module'){state.moduleName=String(value).trim();state.moduleFormatRuns=[];}else if(ref.kind==='group'){item.name=String(value).replace(/[\r\n]+/g,' ');item.formatRuns=[];}
     else if(ref.kind==='comment')item.comment=cleanCommentLive(value);
     else{item.name=cleanSignalNameLive(value);item.formatRuns=[];}
-    commitHistorySnapshot(before);render();
-    if(state!==candidate)return false;
-    return true;
+    const accepted=commitHistorySnapshot(before);render();
+    return accepted;
   }catch(e){state=normalizeProjectState(JSON.parse(before));render();portEditNotice(e.message);return false;}
 }
 function prepareCanvasLabels(){
@@ -1385,6 +1368,7 @@ function prepareCanvasLabels(){
     const label=ref.kind==='module'?'模組 '+state.moduleName:ref.kind==='group'?'群組 '+item.name:ref.kind==='bits'?item.name+' 位寬 '+item.bits:ref.kind==='comment'?item.name+' 註解':item.name;
     el.setAttribute('aria-label',label);el.title=label+' · '+(ref.kind==='name'?'直接輸入 · Enter / Tab 下一個名稱 · Shift 反向 · Esc 取消':'原位輸入 · Enter / Tab 套用 · Esc 取消');
     if(ref.kind==='comment'&&!item.comment)el.placeholder='＋ 註解';
+    const draft=canvasDrafts.get(canvasDraftKey(ref));if(draft){el.value=draft.value;el.setAttribute('aria-invalid','true');el.title=draft.error;}
   }
   for(const el of $$('.line-length-editor')){const sig=state.signals[el.dataset.side]?.find(s=>s.id===el.dataset.id),info=sig&&window.WIUProjectHost?.widthInfo?.(lengthToRange(sig.bits));el.classList.toggle('r73-width-error',!!info?.error);if(info?.error){el.title='本模組未能解析：'+info.error+'；點擊補上宣告';el.setAttribute('aria-invalid','true');}}
   const existing=window.WIUCanvasEditing?.duplicateSets(canvasSignalRows())||[];
@@ -1436,7 +1420,7 @@ window.addEventListener('resize',()=>{if(canvasEdit)positionCanvasEditor(canvasE
 // The full-width table/properties editors use the same conflict check. Invalid
 // drafts never enter the model and therefore cannot lock direction changes.
 function directNameRef(el){
- if(el?.readOnly||!(el?.dataset?.deskField==='name'||el?.dataset?.inspectField==='name'||el?.dataset?.act==='name'))return null;
+ if(el?.closest?.('#inlineLayer')||el?.readOnly||!(el?.dataset?.deskField==='name'||el?.dataset?.inspectField==='name'||el?.dataset?.act==='name'))return null;
  const id=el.dataset.id||el.closest?.('[data-id]')?.dataset.id||selectedRowsAll()[0]?.sig.id;
  const row=deskSig(id);return row?{kind:'name',which:row.which,id,anchor:el}:null;
 }
@@ -1574,11 +1558,11 @@ function refreshFindPanel(reset=false){
 function locateFindItem(id,kind){if(kind==='group'){const side=findRows().find(r=>r.kind==='group'&&r.id===id)?.side,s=side&&state.signals[side].find(s=>groupAncestors(side,s.groupId).some(g=>g.id===id));if(s)locateDeskSignal(s.id);}else locateDeskSignal(id);}
 function nextFindMatch(delta=1){if(!findSession)return;refreshFindPanel();const n=findSession.plan.matches.length;if(!n)return;findSession.index=(findSession.index+delta+n)%n;const m=findSession.plan.matches[findSession.index];locateFindItem(m.id,m.kind);refreshFindPanel();}
 function commitFindChanges(plan){
- if(!plan.changes.length||plan.errors.length)return false;const before=snapshotState(),candidate=state;
+ if(!plan.changes.length||plan.errors.length)return false;const before=snapshotState();
  // A stale preview may never write into another sheet or silently overwrite a newer value.
  const rows=findRows();for(const c of plan.changes){if(rows.find(r=>r.id===c.id&&r.kind===c.kind)?.value!==c.before){portEditNotice('內容已變更，請重新確認取代預覽。');return false;}}
  try{for(const c of plan.changes){const item=c.kind==='group'?groupById(c.side,c.id):state.signals[c.side].find(s=>s.id===c.id);if(c.kind==='comment')item.comment=c.after;else{item.name=c.after;item.formatRuns=[];}}
-  commitHistorySnapshot(before);render();if(state!==candidate)return false;return true;
+  const accepted=commitHistorySnapshot(before);render();return accepted;
  }catch(e){state=normalizeProjectState(JSON.parse(before));render();portEditNotice('取代未套用：'+e.message);return false;}
 }
 function applyFindChanges(all){if(!findSession)return;refreshFindPanel();const current=findSession.plan.matches[findSession.index],plan=window.WIUFindReplaceCore.plan(findRows(),findOptions(all?{}:{onlyMatch:current?.key}));if(!commitFindChanges(plan))return;refreshFindPanel();portEditNotice('已取代 '+plan.changes.length+' 列；Ctrl/Cmd+Z 可復原整筆取代。');}
@@ -1644,8 +1628,8 @@ window.WIUBridge={
  const legacyCommit=commitHistorySnapshot,legacyEnd=endHistory,legacyUndo=undo,legacyRedo=redo,legacyUpdate=updateHistoryUI;
  let loading=false,lastRejectedMessage='';
  const originalToast=toast;toast=function(message){if(lastRejectedMessage){const error=lastRejectedMessage;lastRejectedMessage='';window.WIUProjectHost?.reportRejected(error);return;}return originalToast(message);};
- WIUBridge.finish=()=>{if(canvasEdit&&!applyCanvasEditor()){closeCanvasEditor(false);portEditNotice('未套用的編輯已取消，保留原值。');}finishActiveEditHistory();};
- WIUBridge.prepareSave=function(){if(canvasEdit&&!applyCanvasEditor()){portEditNotice('尚未儲存：請先修正或取消目前紅色欄位；編輯內容仍保留。');canvasEdit?.input?.focus();return false;}const edit=directNameEdits.get(document.activeElement);if(edit?.error){portEditNotice('尚未儲存：請先修正目前紅色名稱。');return false;}finishActiveEditHistory();return true;};
+ WIUBridge.finish=()=>{if(canvasEdit&&!applyCanvasEditor()){canvasDrafts.set(canvasDraftKey(canvasEdit),{...canvasEdit,anchor:null,input:null,errorLabel:null,value:canvasEdit.input.value});canvasEdit.errorLabel?.remove();canvasEdit=null;portEditNotice('錯誤輸入已保留；修正或 Esc 取消後才能儲存。');}finishActiveEditHistory();};
+ WIUBridge.prepareSave=function(){if(canvasEdit&&!applyCanvasEditor()){window.WIUSignalTable?.setMode('diagram');locateDeskSignal(canvasEdit.id);portEditNotice('尚未儲存：請先修正或取消目前紅色欄位；編輯內容仍保留。');const ref={...canvasEdit,input:null,anchor:null};window.WIUInteractionR128.paint('focus-draft',()=>openCanvasEditor(ref));return false;}const project=window.__WIU_ASSEMBLY__?.getProject(),draft=[...canvasDrafts.values()].find(d=>{const [pid,mid]=JSON.parse(d.scope);return pid===portClipboardScope().project&&(!project||mid==='top'||project.modules.some(m=>m.id===mid));});if(draft){const mid=JSON.parse(draft.scope)[1];if(mid!==portClipboardScope().module)window.WIUProjectHost?.openModuleByName(mid==='top'?project.top:project.modules.find(m=>m.id===mid)?.name);window.WIUSignalTable?.setMode('diagram');locateDeskSignal(draft.id);window.WIUInteractionR128.paint('focus-draft',()=>openCanvasEditor(draft));portEditNotice('尚未儲存：請先修正或 Esc 取消保留的錯誤輸入。');return false;}const edit=directNameEdits.get(document.activeElement);if(edit?.error){portEditNotice('尚未儲存：請先修正目前紅色名稱。');return false;}finishActiveEditHistory();return true;};
  WIUBridge.loadSheet=function(raw){closeCanvasEditor(false);closeFindPanel();resetDiagramInteraction();activeGroupId={left:null,right:null};activeConditionId={left:null,right:null};selectionAnchor.left=null;selectionAnchor.right=null;nameFormatTarget=null;previewView.fit=true;loading=true;try{state=normalizeProjectState(raw);history.undo.length=0;history.redo.length=0;history.tx=null;clearAllSelections();render();}finally{loading=false;}};
  WIUBridge.workspaceScale=()=>previewView.scale;
  WIUBridge.workspaceZoom=function(mode){
@@ -1663,8 +1647,8 @@ window.WIUBridge={
  WIUBridge.rtl=()=>rtlText()+"\nendmodule\n";
  WIUBridge.rename=name=>{withHistory(()=>state.moduleName=name);render();};
  WIUBridge.raw=()=>JSON.parse(JSON.stringify(state));
- WIUBridge.uiSnapshot=()=>({view:{...previewView},side,left:[...rowSelection.left],right:[...rowSelection.right],activeGroupId:{...activeGroupId},activeConditionId:{...activeConditionId}});
- WIUBridge.restoreUi=ui=>{if(!ui)return;Object.assign(previewView,ui.view||{});side=ui.side==='right'?'right':'left';rowSelection.left=new Set(ui.left||[]);rowSelection.right=new Set(ui.right||[]);activeGroupId=ui.activeGroupId||{left:null,right:null};activeConditionId=ui.activeConditionId||{left:null,right:null};render();};
+ WIUBridge.uiSnapshot=()=>({view:{...previewView},side,left:[...rowSelection.left],right:[...rowSelection.right],activeGroupId:{...activeGroupId},activeConditionId:{...activeConditionId},selectionAnchor:{...selectionAnchor},multiSelectMode});
+ WIUBridge.restoreUi=ui=>{if(!ui)return;Object.assign(previewView,ui.view||{});side=ui.side==='right'?'right':'left';rowSelection.left=new Set(ui.left||[]);rowSelection.right=new Set(ui.right||[]);activeGroupId=ui.activeGroupId||{left:null,right:null};activeConditionId=ui.activeConditionId||{left:null,right:null};Object.assign(selectionAnchor,ui.selectionAnchor||{});multiSelectMode=!!ui.multiSelectMode;render();};
  WIUBridge.parseSheet=function(raw,config){const prior=state;loading=true;try{state=normalizeProjectState(raw);const parsed=this.getPorts();return parsed;}finally{state=prior;loading=false;}};
  commitHistorySnapshot=function(before){const host=window.WIUProjectHost;if(!loading&&host?.isDiagramActive()){if(before===snapshotState())return false;lastRejectedMessage='';const result=host.diagramChanged(JSON.parse(JSON.stringify(state)),WIUBridge.getPorts());if(result?.status!=='accepted')lastRejectedMessage=result?.message||'修改尚未套用。';updateHistoryUI();return result?.status==='accepted';}return legacyCommit(before);};
  endHistory=function(){if(!loading&&window.WIUProjectHost?.isDiagramActive()){if(history.applying||history.tx===null)return;const before=history.tx;history.tx=null;commitHistorySnapshot(before);return;}return legacyEnd();};
@@ -1731,7 +1715,8 @@ window.WIUBridge={
   colgroup.innerHTML='<col style="width:26px"><col style="width:22px">'+fs.map(f=>'<col data-grid-col="'+f+'">').join('')+'<col style="width:26px">';setWidths();
   const kind=grid.mode==='table'?'table':'split';columnsMenu.querySelector('div').innerHTML=['group','comment','condition'].map(f=>'<label><input type="checkbox" data-grid-column="'+f+'" '+(grid.columns[kind]?.[f]?'checked':'')+'> '+labels[f]+'</label>').join('')+'<button type="button" data-grid-reset-width>重設欄寬</button>';
  }
- renderDesk=function(){if(!deskReady)return;for(const [k,v] of grid.drafts)if(v.scope===scope()&&!deskSig(v.id))grid.drafts.delete(k);const refs=visibleDeskRefs(),sig=JSON.stringify([scope(),refs.map(x=>[x.which,x.sig,groupById(x.which,x.sig.groupId)?.name,conditionById(x.which,x.sig.conditionId)?.macro]),cols(),grid.mode]);
+ renderDesk=function(){return window.WIUInteractionR128.paint('signal-table',renderDeskNow);};
+ function renderDeskNow(){if(!deskReady)return;for(const [k,v] of grid.drafts)if(v.scope===scope()&&!deskSig(v.id))grid.drafts.delete(k);const refs=visibleDeskRefs(),sig=JSON.stringify([scope(),refs.map(x=>[x.which,x.sig,groupById(x.which,x.sig.groupId)?.name,conditionById(x.which,x.sig.conditionId)?.macro]),cols(),grid.mode]);
   if(sig!==grid.signature&&!body.querySelector('[data-grid-field]:focus')){grid.signature=sig;renderHeader();body.innerHTML=refs.map(rowHtml).join('');datalists.innerHTML=['left','right'].map(w=>'<datalist id="r120-groups-'+w+'">'+state.groups[w].map(g=>'<option value="'+esc(g.name)+'"></option>').join('')+'</datalist>').join('');}
   renderDraftNotice();const count=refs.filter(x=>!isSpacerSignal(x.sig)).length,gaps=refs.length-count;$('#signalResultCount').textContent=count+' 個訊號'+(gaps?' · '+gaps+' 個間隔':'')+' / '+deskRefs().filter(x=>!isSpacerSignal(x.sig)).length+' 個訊號';
   $('#signalsEmpty').hidden=!!refs.length;$('#signalsEmpty').textContent=deskRefs().length?'沒有符合的訊號，請清除篩選。':'尚無訊號。按「新增訊號」或貼上表格開始。';
@@ -1747,7 +1732,7 @@ window.WIUBridge={
  for(const id of ['signalSearch','signalSideFilter','signalDirFilter'])$('#'+id).addEventListener('input',()=>{transient.clear();renderDesk();});
  const gapHint=document.createElement('p');gapHint.className='r120-gap-hint';gapHint.textContent='空白間隔只調整圖面留白，不產生 RTL 接腳。可拖曳、移動或刪除。';$('#inspectorPanel .inspector-scroll').prepend(gapHint);
  const priorTextTarget=workspaceTextTarget;workspaceTextTarget=el=>!!el?.matches?.('[data-grid-field]')||priorTextTarget(el);
- panel.addEventListener('focusin',e=>{const el=e.target;if(!el.matches('[data-grid-field]'))return;grid.editing=el;const id=el.dataset.id,ref=deskSig(id);if(ref&&!rowSelection[ref.which].has(id))setDeskSelection(id);safeFocus(el);});
+ panel.addEventListener('focusin',e=>{const el=e.target;if(!el.matches('[data-grid-field]'))return;grid.editing=el;const id=el.dataset.id,ref=deskSig(id);if(ref&&!rowSelection[ref.which].has(id))setDeskSelection(id);});
  panel.addEventListener('input',e=>{const el=e.target;if(!el.matches('[data-grid-field]')||e.isComposing)return;const f=el.dataset.gridField,error=fieldError(el.dataset.id,f,el.value);grid.drafts.set(key(el.dataset.id,f),{value:el.value,error,id:el.dataset.id,field:f,scope:scope(),module:state.moduleName});feedback(el,error);renderDraftNotice();});
  panel.addEventListener('focusout',e=>{if(!e.target.matches('[data-grid-field]'))return;if(grid.editing===e.target)grid.editing=null;commitField(e.target);requestAnimationFrame(()=>renderDesk());});
  function focusCell(id,field){const el=body.querySelector('[data-desk-id="'+CSS.escape(id)+'"] [data-grid-cell="'+field+'"]');safeFocus(el);el?.scrollIntoView({block:'nearest',inline:'nearest'});}
@@ -1840,6 +1825,8 @@ window.WIUBridge={
 
 
 window.__WSS_TEST__={getView:()=>({...previewView}),visibleDeskRefs,moveDeskSelection,duplicateDeskSelection,reorderDeskSelection,setDeskSelection,locateDeskSignal,parseVerilogModulesForImport,loadProjectFile,rtlImportApplySelected,copyPayloadFromSelection,makeVbs,getState:()=>state,makeProject,normalizeProjectState,isBusBits,undo,redo,selectAllRows,pasteRowItems,history,rowSelection,toggleNameFormat,styleSpec,styledNameSvg,styledNameHtml,encodeState,decodeState,makeEmbeddedStateChunks,decodeProjectCarrierText,projectCarrierAudit,verifyCarrierEncoded,verifyVbsCarrierDeterministic,currentCommentCount,pngBlobWithState,extractEncodedStatesFromPngBuffer,exportSvgText,pdfBytesWithJpeg,extractEncodedStatesFromText,applyToolbarFormat,enterPresentation,exitPresentation,fitPresentation,applySignalColor,applyGroupColor,buildRtlLines,rtlText,rtlConditionAudit,conditionById,conditionSegments,createConditionForSelected,assignSelectedCondition,updateConditionAssignToolbar,rtlModuleName,rtlPortText,rtlGroupComment,svIdentifier,reconcileRtlOrder,orderedRtlRefs,rtlGroupMemberIds,rtlRefGroupKey,commitRtlReorder,rtlGroupFoldedR101,lengthToRange,commentPreviewText,renderRtlDeclarations,assignSelectedGroup,assignSelectedDirection,updateGroupAssignToolbar,updateDirectionAssignToolbar,safeProjectName,groupGeometry,editorGroupGeometry,conditionGeometry,groupRailX,sideConditionLabelWidth,bestResizeHandleRatio,signalIsCommented,isCommentedLabel,cleanMacroLabel,cleanMacroLabelLive,conditionDirectiveText,activeRtlRefs,inlineCardWidthForSignal,inlineCardWidthForSide,screenDropSide,commitInlineMove,render,moveExcelSignalEditor,signalFieldElement};render();deskSavedState=JSON.stringify(state);renderDesk();
+const multiTools=document.createElement('span');multiTools.className='r128-selection-tools';multiTools.innerHTML='<button type="button" id="r128-multi" aria-pressed="false">多選：關</button><button type="button" id="r128-clear">清除選取</button>';$('#toggleSignalTable')?.parentElement?.append(multiTools);
+$('#r128-multi').onclick=()=>{multiSelectMode=!multiSelectMode;$('#r128-multi').setAttribute('aria-pressed',String(multiSelectMode));$('#r128-multi').textContent='多選：'+(multiSelectMode?'開':'關');portEditNotice(multiSelectMode?'點訊號可逐項加入／取消；平移和縮放保留選取。要輸入文字時先關閉多選。':'可直接點名稱編輯；Ctrl／Shift 仍可多選。');};$('#r128-clear').onclick=()=>{clearAllSelections();refreshPortSelection();};
 const initialVbs=makeVbs();$("#vbsAudit").textContent=JSON.stringify({length:initialVbs.length,hasEmbedded:initialVbs.includes("EmbeddedStencilBase64")&&initialVbs.includes("ADODB.Stream"),uniqueTempStencil:initialVbs.includes("fso.GetTempName")&&!initialVbs.includes(`WSS-NIC-${TEMPLATE_HASH}.vss`),safeTempWrite:initialVbs.includes("Cannot write embedded stencil to Windows TEMP"),hiddenStencilOpen:initialVbs.includes("STENCIL_OPEN_FLAGS = 458")&&!initialVbs.includes("visOpenDocked"),usesCoreMasters:["block","signal name","multi bit"].every(x=>initialVbs.includes(x)),connectorMaster:initialVbs.includes("連接器2"),calibri:initialVbs.includes('FONT(""Calibri"")'),jhenghei:initialVbs.includes('FONT(""Microsoft JhengHei"")'),forbidden:/新細明體|PMingLiU/i.test(initialVbs),bitMasterRaised:initialVbs.includes("busX, y + 0.105"),freeTextBits:isBusBits("8b")&&isBusBits("[7:0]")&&!isBusBits("1b"),projectRoundTrip:normalizeProjectState(makeProject()).signals.left.length===state.signals.left.length,visioTextWidthParity:initialVbs.includes("TEXTWIDTH(TheText)+0.10 in")&&initialVbs.includes("leftNameShapes")&&initialVbs.includes("rightNameShapes"),cleanGroupBracket:initialVbs.includes("pg.DrawLine(x, y1, x, y2)"),portLabelsInsideBlock:true,historyReady:typeof undo==="function"&&typeof redo==="function",resizableBlock:typeof applyBlockResize==="function",spacerRows:isSpacerSignal({name:""})&&!isSpacerSignal({name:"A"}),newSignalEditable:true,gapReopenEditable:true,shiftNameRangeSelect:true,ctrlNameToggleSelect:true,multiDeleteSelected:true,multiClipboardAcrossSides:true,bitUndoReliable:true,bitModifierSelection:true,bitCtrlDelete:true,clipboardPreservesGroups:true,crossSideDragPreservesGroups:true,richNameFormatting:initialVbs.includes("ApplyTextRunsRecursive"),inoutReady:initialVbs.includes("isInout"),reloadableMetadata:typeof pngBlobWithState==="function"&&typeof pdfBytesWithJpeg==="function"&&typeof makeEmbeddedStateChunks==="function",reloadableVbs:initialVbs.includes("WRAPPINUP_STATE_CHUNK:"),vbsCarrierDeterministic:verifyVbsCarrierDeterministic(),carrierSelfVerify:typeof verifyCarrierEncoded==="function",presentationReady:typeof enterPresentation==="function",colorReady:initialVbs.includes("lineColorFormula")&&initialVbs.includes("textColorFormula"),railGeometryReady:initialVbs.includes("layout.leftSignalX")===false&&initialVbs.includes("AddInterfaceGroup"),commentReady:initialVbs.includes("AddSignalComment")&&initialVbs.includes('ApplyFonts n, "8 pt"'),rtlDeclarationReady:lengthToRange("8B")==="[63:0]"&&lengthToRange("1B")==="[7:0]"&&lengthToRange("B")==="[7:0]"&&lengthToRange("8b")==="[7:0]"&&lengthToRange("b")==="",inlineLengthOnWire:typeof inlineLengthHtml==="function",inlineBlockTitle:typeof inlineBlockTitleHtml==="function",multiRowDrag:true&&lengthToRange("[1:3]")==="[1:3]",crossSideDrag:true,innerNameLayout:true,nameInsideBlock:true,contentDrivenBlock:true,commentSpaces:true,shortDefaultWires:true,mirroredPortNameAlignment:true,vbsMirroredPortText:true,portNameEdgePadShared:true,portNameWireYAligned:true,waveASecondStencilFont8pt:true,unifiedPortTextSize:true,rtlDragOrder:true,rtlGroupDrag:true,arrowClickDirection:true,wireClickDirection:true,waveASecondDragHandle:true,waveASecondDropRule:true,waveASecondIconVocabulary:true,rtlLargeDropTargets:true,rtlPanelResizable:true,rtlPanelHeightPersisted:true,rtlUndoReliable:true,rtlCtrlCopy:true,verilogOnly:true,rtlSourceImport:true,multiModuleDetection:true,commentIgnoringParser:true,classicVerilogPortImport:true,conditionalPortImport:true,verilogAnsiPorts:true,compactImplicitNetPorts:true,noRegPorts:true,singleSourceRtlComments:true,noInternalWireRegEmission:true,noHandWrittenSynchronizerEmission:true,rtlVisibleByDefault:true,independentBlockRails:true,largeBlockResizeHitZones:true,editFirstTextFields:true,stableNameCommentTyping:true,seamlessEditorToEditorFocus:true,blankPanThreshold:true,spacePanAnywhere:true,noInvisibleEmptyCommentHitbox:true,edgeBandResize:true,resizeEdgeTracksBlockHeight:true,fullSignalNameDisplay:true,excelFirstClickSelectAll:true,excelEnterVertical:true,excelTabHorizontal:true,commentPrefixDisable:true,commentedGroupDirectives:true,liveCommentedVisuals:true,tableExcelNavigation:true,inlineGroupDelete:true,explicitIfndefButton:true,resizePriorityHitTest:true,resizeHandlesAvoidSignalRows:true,resizeOverlayUnobtrusive:true,alwaysReadyBlockHandles:true,editorWASDSafeContext:true,ctrlAAllSides:true,groupAssignReady:typeof assignSelectedGroup==="function",ifdefReady:typeof createConditionForSelected==="function"&&typeof rtlConditionAudit==="function",ifdefSeparateFromGroup:true,ifdefBetweenGroupAndWire:true,ifdefNoUnusedLane:true,ifdefClipboardReady:true,ifdefCrossSideReady:true,ifdefVisioReady:initialVbs.includes("AddInterfaceCondition"),directionAssignReady:typeof assignSelectedDirection==="function",deleteControlAwayFromArrow:true,stableBlockNameEditing:true,unifiedRichText:initialVbs.includes("ApplyTextRunsRecursive wrapper")&&initialVbs.includes("AddInterfaceGroup")&&typeof moduleFormatObject==="function",externalCommentLane:typeof commentLaneGeometry==="function",commentSlashAligned:true,commentLaneAutoWidth:true,vbsCommentTextWidth:true&&initialVbs.includes("AddSignalComment")});
 // Shared read-only presentation for Top wiring and module interfaces.
 // Installed inside the retained native editor after its presentation controls.
