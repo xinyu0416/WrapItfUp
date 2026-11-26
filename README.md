@@ -1,14 +1,26 @@
 # WrapItfUp
 
-**Public r132 · Module interfaces → Top wiring → RTL and diagram handoff**
+**Public r140 · Module interfaces → Top wiring → RTL and diagram handoff**
 
-[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r132.md)
+[Open WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) · [繁體中文](#繁體中文) · [English](#english) · [Release notes](RELEASE_NOTES.md) · [Verification](docs/VERIFICATION-r140.md)
 
 WrapItfUp 把子模組介面、Top 實例接線、RTL 與圖面放在同一份設計中。先定義或匯入模組，放入實例，完成接線，再帶走可繼續編輯的專案與交付檔案。
 
 This repository contains the maintainable application source, public examples, regression tests, build tools, documentation, and GitHub Pages workflow. It is not just a compiled HTML snapshot.
 
 ## 繁體中文
+
+### r140 霧玫瑰 Clock 與圖上編輯
+
+Clock 使用霧玫瑰細圓圈與方波, 淡粉色底; 未啟用時顯示灰色虛線圓. Clock 有獨立點選區, 與方向箭頭, 名稱及拖曳/刪除工具分開. 縮小時點名稱會放大到可讀視野, 編輯框保持在自己的欄位內. 底部「返回原視野」可回到編輯前視野. 此操作只改鏡頭, 不改已保存的間距與接線. [本版驗證](docs/VERIFICATION-r140.md).
+
+### r138 圖上編輯與 Clock 標記
+
+右側訊號名稱在縮放後仍固定接腳側的邊緣, 編輯框向 block 內延伸並完整顯示. 滑到或選取接腳, 點旁邊的圓圈方波即可標記 Clock; 再點一次恢復原本類型, 包含 1-bit Data. 不會改動接腳名稱, 方向或位寬. 支援復原, 重做與儲存重開. [本版驗證](docs/VERIFICATION-r138.md).
+
+### r137 整個訊號複製貼上
+
+選取 Signal Port 或訊號表整列, Ctrl/Cmd+C 後到 WaveASecond Ctrl/Cmd+V. 反向操作會新增接腳, 重名沿用既有編號. 波形類型可選自動, Signal, Data 或 Clock; 支援 1-bit Data. Clock 在 block 內顯示圓圈方波, 多 bit 位寬標在線旁. 每批貼上可一次復原. [操作與共用格式](docs/SIGNAL-CLIPBOARD.md).
 
 ### 從這裡開始
 
@@ -18,6 +30,24 @@ This repository contains the maintainable application source, public examples, r
 4. 修改訊號、位寬、方向、群組和參數，再到 Top 接線頁完成連接並查看檢查結果。
 5. 儲存 `.wiu.json` 專案；由「產生 RTL／gen_top」下載 RTL、VBS 或 Linux 工作包。
 6. 文字傳送時依序執行 `bash`、接收器、資料批次、`CHECK`，每次貼上後按 Enter。貼回終端回報核對檔案數與 SHA-256，再於 Linux 執行產生與驗證。網站檢查不代表 Linux 已執行。
+
+### Top 接線圖改名
+
+點選一條線, 按 F2 或選「改線名」即可修改整條 net 的 RTL 名稱. 雙擊線段可新增中文或英文圖面標籤. 點標籤直接編輯, Enter 套用, Esc 取消, 清空後套用即可移除. 說明跟隨該分支, 專案可儲存重開, 可用 Ctrl+Z 復原或 Ctrl+Shift+Z 重做. 點線時可在下方核對 Driver 和 Load.
+
+線距檢查列提供「預覽線距修復」. 比較畫布尺寸、重疊和跳線數量後再套用. 大圖可能需要更大的畫布. [r136 驗證](docs/VERIFICATION-r136.md)
+
+### r135 工作包 org 排列
+
+在「產生 RTL／gen_top → Linux 工作包 → 檔案清單與個別預覽」開啟 `.v.org`。Top I/O 按 RTL 宣告順序集中列出，內部 wire 及其接線接續在後。單獨匯出與工作包共用同一份 org 排版。[驗證紀錄](docs/VERIFICATION-r135.md)
+
+### r134 接線檢閱與子模組 RTL
+
+在 Top 接線圖點線段，同時查看 Driver 與 Load 的 instance／group／pin。點端點定位，多個 Load 可用左右鍵鈕輪巡。Top 工具列的「專案」選單可查看草稿、組態與最近匯出。開啟子模組的「RTL 面板 → 納編原始檔」，可看、複製或下載工作包使用的完整來源。「介面宣告／排序」保留接腳排序與宣告複製。詳見 [驗證紀錄](docs/VERIFICATION-r134.md)。
+
+### r133 簡報用 Group 接線圖
+
+在 Top 選「Group 接線圖」。每一對已接線的 instance／group 以一條線表示，箭頭顯示資料流向，線上的 ×N 是不同 net 的數量。兩端都要有 group。展開「勾選顯示的 Group」可搜尋 instance 或 group，再勾選要展示的兩端。下載 SVG 可在投影片中放大，下載 PNG 可直接插圖。詳見 [r133 驗證紀錄](docs/VERIFICATION-r133.md)。
 
 ### r132 外側線距與接線檢閱
 
@@ -64,7 +94,7 @@ Top 最外側改用獨立線道，必要時擴大空間；舊圖可用「排列�
 
 ### 名稱與檔案用途
 
-產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r132-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
+產品與 repository 統一為 **WrapItfUp**；離線成品為 **WrapItfUp-r140-offline.html**。工程目錄沿用 WaveASecond 的 `src/`、`tests/`、`tools/`、`examples/`、`docs/` 命名習慣。`package.json` 的 npm 識別名稱 `wrapitfup` 使用小寫，並非產品顯示名稱。RTL 中的模組／訊號名稱保留使用者輸入的大小寫。
 
 | 檔案 | 用途 |
 | --- | --- |
@@ -100,6 +130,16 @@ gen_top／gen_empty 等外部執行工具需由使用者在自己的環境提供
 
 ## English
 
+r140 uses the selected dusty-rose Clock icon in the editor, Top graph and diagram exports. A dedicated hit area separates Clock from direction and name editing. Editing at reduced zoom focuses the camera at readable scale; Return view restores the prior camera. Inline names stay within their own cells. Drawing geometry and generator inputs remain separate from camera state.
+
+r138 fixes the right-side inline name editor at reduced zoom. Hover or select a port and click its circle/square-wave control to mark it as Clock. Click again to restore its previous type, including explicit one-bit Data. This changes waveform metadata only and supports undo, redo and saved projects. [Verification](docs/VERIFICATION-r138.md).
+
+r137 adds whole-signal copy/paste with WaveASecond using the system clipboard. Select ports or complete signal rows, copy, then paste in the other editor. Every paste creates new rows, using destination defaults and existing naming/undo rules. See [clipboard contract](docs/SIGNAL-CLIPBOARD.md) and [verification](docs/CLIPBOARD-VERIFICATION.md).
+
+In Top Wiring, select a wire and press F2 to rename its electrical net. Double-click a branch to add a drawing label. Click a label to edit it, press Enter to commit, or Esc to cancel. Both edits support undo and redo and persist in a saved workbook. [Verification](docs/VERIFICATION-r136.md)
+
+The r135 Linux package groups all Top I/O in declaration order, followed by internal wires and their connections. Open the org under the package file list to preview, copy or download it. [Verification](docs/VERIFICATION-r135.md)
+
 ### Start here
 
 Open [WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) and choose the complete example to inspect a connected two-module design. Create or import module definitions, place instances in Top, connect ports, review diagnostics, and save the project before exporting deliverables.
@@ -107,6 +147,14 @@ Open [WrapItfUp](https://xinyu0416.github.io/WrapItfUp/) and choose the complete
 The module list owns definitions; the Top view owns instances and wiring. Editable names use inline fields. Deleting a definition can remove its dependent instances and connections as one undoable operation. Source-owned definitions retain their import restrictions.
 
 For Linux text transfer, follow the separate `bash`, receiver, data batches and `CHECK` steps, pressing Enter after each paste. Clipboard success is separate from receiver confirmation, file hashes, generation, compilation and simulation. Orphan Empty settings can be removed or reassigned in the UI. Top-pin deletion previews related connections, assignments and Empty settings and commits one undoable transaction.
+
+### r134 endpoint inspection and child RTL
+
+Select a wire to see the driver and load paths together. Choose a path to locate it or use the load arrows to cycle through fanout. Routine graph and project status share the existing toolbar and Project menu. Open a child module’s RTL panel to inspect, copy or download its complete package source. **介面宣告／排序** retains the declaration editor and ordering controls. See the [verification record](docs/VERIFICATION-r134.md).
+
+### r133 group wiring diagrams for slides
+
+Choose **Group 接線圖** in the Top toolbar. Each pair of connected instance groups becomes one line. Arrows show the direction of flow, and ×N counts distinct nets in that pair. Open the group selector to search for instances or groups. Check both ends of each connection you want to show. Download the filtered diagram as SVG or PNG. See the [r133 verification record](docs/VERIFICATION-r133.md).
 
 ### r132 outer lanes and connection review
 
@@ -180,7 +228,7 @@ npm run build:offline
 npm run release:check
 ```
 
-`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r132-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r132-offline` artifact from a successful Actions run while it remains available.
+`npm run build` embeds the source into `dist/index.html`. `npm run build:offline` creates `preview/WrapItfUp-r140-offline.html` from exactly the same builder. The offline HTML contains all application scripts and styles and opens without a development server or CDN. Download the full repository with GitHub **Code → Download ZIP**; build the offline file locally, or download the `WrapItfUp-r140-offline` artifact from a successful Actions run while it remains available.
 
 ### GitHub Pages
 

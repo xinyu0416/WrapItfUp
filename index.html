@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WrapItfUp Public r128</title>
+<title>WrapItfUp Public r140</title>
 <style id="wiu-boot-style">body[data-wiu-boot]>:not(#wiu-boot-status){visibility:hidden!important;pointer-events:none!important}#wiu-boot-status{position:fixed;inset:0;display:grid;place-content:center;background:#f7f8f5;color:#263c43;font:16px system-ui;z-index:2147483647}</style>
 <link rel="stylesheet" href="./src/editor.css">
 <link rel="stylesheet" href="./src/toolbar-overflow.css">
@@ -25,6 +25,8 @@
 <link rel="stylesheet" id="r120-workspace" href="./src/signal-table.css">
 <link rel="stylesheet" href="./src/interaction-r128.css">
 <link rel="stylesheet" href="./src/net-review-r132.css">
+<link rel="stylesheet" href="./src/group-diagram.css">
+<link rel="stylesheet" href="./src/net-inspection.css">
 </head>
 <body class="a-assembly" data-wiu-boot="loading">
 <div id="wiu-boot-status" role="status">WrapItfUp · 正在載入…<noscript>請啟用 JavaScript 後重新開啟。</noscript></div>
@@ -63,7 +65,7 @@
       <div id="dragIntent" hidden role="status"></div><div class="canvas inline-editing" id="canvas" tabindex="0" title="Edit signals inline · drag background to pan · wheel to zoom · F5 Presentation · WASD is Presentation-only"></div>
     </section>
     <div class="rtl-panel-resizer" id="rtlPanelResizer" role="separator" aria-orientation="horizontal" aria-label="Resize Verilog port declaration panel" title="Drag up/down to resize Verilog Port Declaration · double-click to reset"><span></span></div>
-    <section class="rtl-panel" id="rtlPanel"><div class="rtl-head"><span class="rtl-title" id="rtlTitle" title="Verilog-2001 ANSI module header · compact implicit-net port declarations · no reg">VERILOG MODULE PORTS</span><span class="rtl-sub" id="rtlSub">來源宣告順序 · 圖面搬移不改 RTL · 可獨立拖曳排序</span><button class="mini" id="rtlCopy" title="Copy Verilog declaration">Copy RTL</button><button class="mini" id="rtlToggle" title="Collapse / expand">▾</button></div><div class="rtl-wrap"><table class="rtl-table"><tbody id="rtlRows"></tbody></table></div></section>
+    <section class="rtl-panel" id="rtlPanel"><div class="rtl-head"><span class="rtl-title" id="rtlTitle" title="Verilog-2001 ANSI module header · compact implicit-net port declarations · no reg">VERILOG MODULE PORTS</span><span id="r134-source-tabs" hidden><button class="mini" id="r134-show-file" type="button">納編原始檔</button><button class="mini" id="r134-show-ports" type="button">介面宣告／排序</button></span><span id="r134-source-actions" hidden><code id="r134-source-name"></code><button class="mini" id="r134-file-copy" type="button">複製完整檔案</button><button class="mini" id="r134-file-download" type="button">下載原始檔</button></span><span class="rtl-sub" id="rtlSub">來源宣告順序 · 圖面搬移不改 RTL · 可獨立拖曳排序</span><button class="mini" id="r134-header-download" type="button" hidden>下載介面骨架</button><button class="mini" id="rtlCopy" title="Copy Verilog declaration">Copy RTL</button><button class="mini" id="rtlToggle" title="Collapse / expand">▾</button></div><div class="rtl-wrap"><pre id="r134-source-text"></pre><table class="rtl-table"><tbody id="rtlRows"></tbody></table></div></section>
 <div class="issue-tray" id="issueTray" hidden></div>
   </main><aside id="inspectorPanel" class="desk-panel" aria-label="選取屬性">
  <div class="desk-panel-header"><b id="inspectorTitle">選取屬性</b><button class="btn" id="closeInspector" aria-label="收合屬性">×</button></div>
@@ -113,6 +115,8 @@
 <script data-wiu-source="shortcut-routing.js" src="./src/shortcut-routing.js"></script>
 <script data-wiu-source="instance-layout.js" src="./src/instance-layout.js"></script>
 <script src="./src/interaction-r128.js"></script>
+<script src="./src/signal-clipboard.js"></script>
+<script src="./src/port-clipboard.js"></script>
 <script src="./src/editor.js"></script>
 
 <template id="a-readme-content"><article class="a-readme"><h2>WrapItfUp Public</h2><p>建立子模組介面，將 instance 放入 Top，完成接線後檢查並匯出。</p><ol><li>左側「＋」建立子模組，名稱在上方直接修改。</li><li>切到 Top 接線，使用「＋ Instance」加入模組；點兩個接腳連線。</li><li>「檢查」列出未接、位寬及驅動問題。</li><li>「RTL／工作包」匯出 RTL、org、Empty 與設定。Visio 按鈕下載 .vbs。</li></ol><p>Ctrl／Cmd＋Z 復原；Ctrl／Cmd＋Shift＋Z 重做。刪除模組會同步移除 instances 與相關接線，可復原。</p><p>專案存取在瀏覽器本機完成。公開版不含內部手冊、工具原始碼或內部教學資料。外部工具須自行提供與驗證。</p></article></template>
@@ -122,6 +126,7 @@
 <script data-wiu-source="delivery-transfer.js" src="./src/delivery-transfer.js"></script>
 <script data-wiu-source="assembly-toolchain-assets.js" src="./src/assembly-toolchain-assets.js"></script>
 <script data-wiu-source="assembly-defines.js" src="./src/assembly-defines.js"></script>
+<script data-wiu-source="org-layout.js" src="./src/org-layout.js"></script>
 <script data-wiu-source="assembly-core.js" src="./src/assembly-core.js"></script>
 <script data-wiu-source="assembly-parser.js" src="./src/assembly-parser.js"></script>
 <script data-wiu-source="assembly-actions.js" src="./src/assembly-actions.js"></script>
@@ -149,22 +154,26 @@
 <script data-wiu-source="workbook.js" src="./src/workbook.js"></script>
 <script data-wiu-source="graph-layout.js" src="./src/graph-layout.js"></script>
 <script data-wiu-source="graph-wiring.js" src="./src/graph-wiring.js"></script>
+<script data-wiu-source="graph-clipboard.js" src="./src/graph-clipboard.js"></script>
 <script data-wiu-source="wire-geometry.js" src="./src/wire-geometry.js"></script>
 <script data-wiu-source="graph-electrical-audit.js" src="./src/graph-electrical-audit.js"></script>
 <script data-wiu-source="corner-untangle-r100.js" src="./src/corner-untangle-r100.js"></script>
 <script data-wiu-source="track-space-r106.js" src="./src/track-space-r106.js"></script>
 <script data-wiu-source="routing-fast-r130.js" src="./src/routing-fast-r130.js"></script>
 <script data-wiu-source="graph-viewport-r130.js" src="./src/graph-viewport-r130.js"></script>
+<script data-wiu-source="wire-labels.js" src="./src/wire-labels.js"></script>
 <script data-wiu-source="graph-scene.js" src="./src/graph-scene.js"></script>
 <script data-wiu-source="group-focus-r100.js" src="./src/group-focus-r100.js"></script>
 <script data-wiu-source="issue-review-r131.js" src="./src/issue-review-r131.js"></script>
 <script data-wiu-source="net-review-r132.js" src="./src/net-review-r132.js"></script>
+<script data-wiu-source="group-diagram.js" src="./src/group-diagram.js"></script>
 <script data-wiu-source="workbook-view.js" src="./src/workbook-view.js"></script>
 <script data-wiu-source="port-widths.js" src="./src/port-widths.js"></script>
 <script data-wiu-source="canvas-editing.js" src="./src/canvas-editing.js"></script>
 <script data-wiu-source="find-replace.js" src="./src/find-replace.js"></script>
 <script data-wiu-source="text-editing.js" src="./src/text-editing.js"></script>
 <script data-wiu-source="graph-edit-r111.js" src="./src/graph-edit-r111.js"></script>
+<script data-wiu-source="channel-layout.js" src="./src/channel-layout.js"></script>
 <script data-wiu-source="workflow-r118.js" src="./src/workflow-r118.js"></script>
 <script data-wiu-source="import-review-r118.js" src="./src/import-review-r118.js"></script>
 <script data-wiu-source="history-flow-r118.js" src="./src/history-flow-r118.js"></script>
