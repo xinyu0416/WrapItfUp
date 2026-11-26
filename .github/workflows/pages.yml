@@ -19,10 +19,14 @@ jobs:
           node-version: '22.16.0'
       - run: npm ci --no-fund --no-audit
       - run: npm run release:check
+      - name: Resolve offline artifact name
+        id: offline
+        run: node -e "console.log('name=WrapItfUp-r'+require('./src/release').number+'-offline')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: WrapItfUp-r126-offline
-          path: preview/WrapItfUp-r126-offline.html
+          name: ${{ steps.offline.outputs.name }}
+          path: preview/${{ steps.offline.outputs.name }}.html
+          if-no-files-found: error
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
