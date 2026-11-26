@@ -10,3 +10,8 @@ body.r81-graph .wb-canvas input:not([readonly]),body.r81-graph .wb-canvas textar
 body.r81-graph .r99-manual-layout {font-weight:700;color:#59607a;}
 body.r81-graph .r99-layout-error {font-weight:750;color:#ae344b;}
 
+.wb-canvas [data-graph-copy-pin]{cursor:pointer;pointer-events:visiblePainted}
+.wb-canvas [data-graph-copy-pin][aria-pressed="true"]{fill:#08796f;stroke:#08796f;stroke-width:.25px;text-decoration:underline}
+.wb-canvas [data-graph-copy-pin]:focus-visible{outline:2px solid #08796f}
+
+.wb-canvas button[data-graph-copy-pin][aria-pressed="true"]{outline:2px solid #08796f;background:#08796f18!important}

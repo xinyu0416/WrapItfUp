@@ -1,5 +1,11 @@
 # WrapItfUp documentation
 
+- [Public r139 Clock state contrast](VERIFICATION-r139.md)
+- [Public r138 block editing and direct Clock controls](VERIFICATION-r138.md)
+- [Public r136 wire editing and delivery verification](VERIFICATION-r136.md)
+- [Public r135 org layout verification](VERIFICATION-r135.md)
+- [Public r134 endpoint and child source verification](VERIFICATION-r134.md)
+- [Public r133 group diagram verification](VERIFICATION-r133.md)
 - [Architecture and data ownership](ARCHITECTURE.md)
 - [Public edition boundaries](PUBLIC-EDITION.md)
 - [Public r131 verification and prior-requirement review](VERIFICATION-r131.md)

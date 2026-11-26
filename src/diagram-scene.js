@@ -7,14 +7,43 @@ function text(value,x,y,align,options={},measure){
  const size=options.size||11,bold=!!options.bold,width=Math.ceil(Math.max(1,measure(String(value),`${bold?700:400} ${size}px ${font}`))*1.14+12);
  return {type:'text',text:String(value),x:align==='end'?x-width:align==='middle'?x-width/2:x,y:y-size*.85,width,height:size*1.7,align,size,bold,color:'#222222',...options};
 }
-function bounds(items){const xs=[],ys=[];for(const s of items){if(s.points){xs.push(...s.points.map(p=>p[0]));ys.push(...s.points.map(p=>p[1]));}else if(s.type==='line'){xs.push(s.x1,s.x2);ys.push(s.y1,s.y2);}else{xs.push(s.x,s.x+s.width);ys.push(s.y,s.y+s.height);}}return {x:Math.min(...xs)-24,y:Math.min(...ys)-24,width:Math.max(...xs)-Math.min(...xs)+48,height:Math.max(...ys)-Math.min(...ys)+48};}
+// One glyph and palette drive the live control, Top graph, SVG and Visio.
+const clockStyle=Object.freeze({stroke:'#A65F86',fill:'#F8EAF1',inactive:'#858B94',radius:8,weight:1.4});
+const clockWave=Object.freeze([[-4.8,3.2],[-4.8,-3.2],[-1.6,-3.2],[-1.6,3.2],[1.6,3.2],[1.6,-3.2],[4.8,-3.2],[4.8,3.2]].map(Object.freeze));
+function clockMarker(x,y,options={}){
+ const {monochrome=false,...metadata}=options,color=monochrome?'#555555':clockStyle.stroke,fill=monochrome?'#f5f5f5':clockStyle.fill,radius=clockStyle.radius;
+ return [
+  {...metadata,type:'ellipse',x:x-radius,y:y-radius,width:radius*2,height:radius*2,color,fill,weight:clockStyle.weight,role:'clock-pin'},
+  {...metadata,type:'path',points:clockWave.map(([dx,dy])=>[x+dx,y+dy]),color,weight:clockStyle.weight,role:'clock-wave'}
+ ];
+}
+function clockIconSvg(active){
+ const [circle,wave]=clockMarker(12,12),stroke=active?circle.color:clockStyle.inactive;
+ return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="${clockStyle.radius}" fill="${active?circle.fill:'none'}" stroke="${stroke}" stroke-width="${clockStyle.weight}"${active?'':' stroke-dasharray="2.2 2.2"'}/><path d="${wave.points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${clockStyle.weight}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function pinWidthLabel(range,width){
+ if(Number.isFinite(width))return width>1?String(width):'';
+ const value=String(range||'').trim();
+ return value&&value!=='1'&&value!=='[0:0]'?value:'';
+}
+function bounds(items){
+ let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+ const include=(x,y)=>{left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);};
+ for(const s of items){
+  if(s.points)for(const [x,y] of s.points)include(x,y);
+  else if(s.type==='line'){include(s.x1,s.y1);include(s.x2,s.y2);}
+  else{include(s.x,s.y);include(s.x+s.width,s.y+s.height);}
+ }
+ return items.length?{x:left-24,y:top-24,width:right-left+48,height:bottom-top+48}:{x:0,y:0,width:0,height:0};
+}
 function svg(scene){
  const b=scene.bounds;return `<svg id="diagramSvg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}" xmlns="http://www.w3.org/2000/svg"><rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" fill="white"/>`+scene.items.map((s,i)=>{
-  const owner=s.ownerInstance?' data-owner-instance="'+esc(s.ownerInstance)+'"':'';
+  const annotation=s.labelId?' data-branch-label="'+esc(s.labelId)+'"':'';
+  const owner=annotation+(s.ownerInstance?' data-owner-instance="'+esc(s.ownerInstance)+'"':'');
   const groupClick=s.group&&['group-name','group-header'].includes(s.role)?' data-graph-group="'+esc(s.group)+'" role="button" tabindex="0" aria-label="追蹤 Group '+esc(s.text||s.group)+'"':'';
   if(s.type==='path'||s.type==='polygon'){
    const pts=s.points,closed=s.type==='polygon',p=pts.at(-1),prev=pts.at(-2),first=pts[0],second=pts[1],arrow=(a,b)=>{const angle=Math.atan2(a[1]-b[1],a[0]-b[0]),dx=Math.cos(angle),dy=Math.sin(angle);return `<polygon points="${a[0]},${a[1]} ${a[0]-7*dx+3*dy},${a[1]-7*dy-3*dx} ${a[0]-7*dx-3*dy},${a[1]-7*dy+3*dx}" fill="${s.color}"/>`;};
-   return `<g${owner} data-net="${esc(s.net||'')}" ${s.role==='wire-jump' ? 'data-net-label="'+esc(s.net||'')+'"' : ''} ${s.role==='connection'?'data-wire-net="'+esc(s.net||'')+'" data-wire-source="'+esc(s.source||'')+'" data-wire-target="'+esc(s.target||'')+'"':''}><${closed?'polygon':'polyline'} points="${pts.map(p=>p.join(',')).join(' ')}" fill="${s.fill||'none'}" stroke="${s.color}" stroke-width="${s.weight||1}" stroke-linejoin="round"/>${s.role==='connection'?'<polyline class="r86-wire-hit" data-wire-hit="'+esc(s.net||'')+'" tabindex="0" role="button" aria-label="選取 net '+esc(s.net||'')+'；Ctrl 加選" points="'+pts.map(p=>p.join(',')).join(' ')+'" fill="none" stroke="transparent" stroke-width="15"/>':''}${s.endArrow?arrow(p,prev):''}${s.startArrow?arrow(first,second):''}<\/g>`;
+   return `<g${owner} data-net="${esc(s.net||'')}" ${s.role==='wire-jump' ? 'data-net-label="'+esc(s.net||'')+'"' : ''} ${s.role==='connection'?'data-wire-net="'+esc(s.net||'')+'" data-wire-source="'+esc(s.source||'')+'" data-wire-target="'+esc(s.target||'')+'"':''}><${closed?'polygon':'polyline'} points="${pts.map(p=>p.join(',')).join(' ')}" fill="${s.fill||'none'}" stroke="${s.color}" stroke-width="${s.weight||1}" stroke-linejoin="round"/>${s.role==='connection'?'<polyline class="r86-wire-hit" data-wire-hit="'+esc(s.net||'')+'" data-branch-key="'+esc(s.routeKey||'')+'" tabindex="0" role="button" aria-label="選取 net '+esc(s.net||'')+'；Ctrl 加選" points="'+pts.map(p=>p.join(',')).join(' ')+'" fill="none" stroke="transparent" stroke-width="15"/>':''}${s.endArrow?arrow(p,prev):''}${s.startArrow?arrow(first,second):''}<\/g>`;
   }
   if(s.type==='ellipse')return `<ellipse${owner} ${s.net?'data-net-label="'+esc(s.net)+'"':''} cx="${s.x+s.width/2}" cy="${s.y+s.height/2}" rx="${s.width/2}" ry="${s.height/2}" fill="${s.fill||s.color}" stroke="${s.color}" stroke-width="${s.weight||0}"/>`;
   if(s.type==='rect')return `<rect${owner}${groupClick} ${s.net?'data-net-label="'+esc(s.net)+'"':''} x="${s.x}" y="${s.y}" width="${s.width}" height="${s.height}" fill="${s.fill||'none'}" stroke="${s.color}" stroke-width="${s.weight||1}" ${s.dash?'stroke-dasharray="5 4"':''}/>`;
@@ -23,7 +52,8 @@ function svg(scene){
    return `<g${owner}><line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="${s.color}" stroke-width="${s.weight||1}" ${s.dash?'stroke-dasharray="4 3"':''}/>${s.endArrow?arrow(s.x2,s.y2,angle):''}${s.startArrow?arrow(s.x1,s.y1,angle+Math.PI):''}<\/g>`;
   }
   const x=s.align==='end'?s.x+s.width:s.align==='middle'?s.x+s.width/2:s.x;
-  const textShape=`<text${owner} ${s.net?'data-net-label="'+esc(s.net)+'"':''} data-scene-text="${i}" x="${x}" y="${s.y+s.height/2}" text-anchor="${s.align||'start'}" dominant-baseline="central" class="${s.className||''}" style="text-anchor:${s.align||'start'};font-family:${font};font-size:${s.size}px;font-weight:${s.bold?700:400};fill:${s.color};white-space:pre">${s.runs?.length?s.runs.map(r=>`<tspan style="font-weight:${r.style&1?700:s.bold?700:400};font-style:${r.style&2?'italic':'normal'};text-decoration:${r.style&4?'underline':'none'}">${esc(r.text)}<\/tspan>`).join(''):esc(s.text)}<\/text>`;
+  const pinSelection=s.key&&['port-name','top-port-name'].includes(s.role)?' data-graph-copy-pin="'+esc(s.key)+'" role="button" tabindex="0" aria-label="選取訊號 '+esc(s.text)+'；Ctrl 加選"':'';
+  const textShape=`<text${owner}${pinSelection} ${s.net?'data-net-label="'+esc(s.net)+'"':''} data-scene-text="${i}" x="${x}" y="${s.y+s.height/2}" text-anchor="${s.align||'start'}" dominant-baseline="central" class="${s.className||''}" style="text-anchor:${s.align||'start'};font-family:${font};font-size:${s.size}px;font-weight:${s.bold?700:400};fill:${s.color};white-space:pre">${s.runs?.length?s.runs.map(r=>`<tspan style="font-weight:${r.style&1?700:s.bold?700:400};font-style:${r.style&2?'italic':'normal'};text-decoration:${r.style&4?'underline':'none'}">${esc(r.text)}<\/tspan>`).join(''):esc(s.text)}<\/text>`;
   if(s.role==='group-name'&&s.group){
     const hitX=s.x-12,hitY=s.y-9,hitW=Math.max(120,s.width+24),hitH=Math.max(32,s.height+17);
     return `<g${groupClick} class="r103-graph-group-target"><rect x="${hitX}" y="${hitY}" width="${hitW}" height="${hitH}" fill="transparent" stroke="none" pointer-events="all"/>${textShape}<\/g>`;
@@ -91,7 +121,7 @@ function vbs(scene,{metadata='',name='wrapper',nativeConnectors=false}={}){
    v.push(`Set shp = page.DrawLine(${num(X(s.x1))}, ${num(Y(s.y1))}, ${num(X(s.x2))}, ${num(Y(s.y2))})`);cell('LineColor',rgb(s.color));cell('LineWeight',num((s.weight||1)*72/unit)+' pt');cell('LinePattern',s.dash?'2':'1');cell('FillPattern','0');cell('Geometry1.NoFill','TRUE');cell('BeginArrow',s.startArrow?'5':'0');cell('EndArrow',s.endArrow?'5':'0');
   }else{
    v.push(`Set shp = page.DrawRectangle(${num(X(s.x))}, ${num(Y(s.y+s.height))}, ${num(X(s.x+s.width))}, ${num(Y(s.y))})`);
-   if(s.type==='ellipse'){v.pop();v.push(`Set shp = page.DrawOval(${num(X(s.x))}, ${num(Y(s.y+s.height))}, ${num(X(s.x+s.width))}, ${num(Y(s.y))})`);cell('LinePattern','0');cell('FillPattern','1');cell('FillForegnd',rgb(s.fill||s.color));}
+   if(s.type==='ellipse'){v.pop();v.push(`Set shp = page.DrawOval(${num(X(s.x))}, ${num(Y(s.y+s.height))}, ${num(X(s.x+s.width))}, ${num(Y(s.y))})`);cell('LinePattern',s.weight>0?'1':'0');cell('LineColor',rgb(s.color));cell('LineWeight',num((s.weight||0)*72/unit)+' pt');cell('FillPattern','1');cell('FillForegnd',rgb(s.fill||s.color));}
    else if(s.type==='rect'){cell('LinePattern',s.dash?'2':'1');cell('LineColor',rgb(s.color));cell('LineWeight',num((s.weight||1)*72/unit)+' pt');cell('FillPattern',s.fill?'1':'0');if(s.fill)cell('FillForegnd',rgb(s.fill));}
    else{
     cell('LinePattern','0');cell('FillPattern','0');v.push('shp.Text = '+q(s.text));cell('Char.Font','FONT("Calibri")');cell('Char.AsianFont','FONT("Calibri")');cell('Char.Size',num(s.size*72/unit)+' pt');cell('Char.Style',s.bold?'1':'0');cell('Char.Color',rgb(s.color));
@@ -188,5 +218,5 @@ function vbs(scene,{metadata='',name='wrapper',nativeConnectors=false}={}){
   'End Sub'
  ]:['Sub CheckError(stepName)','  If Err.Number <> 0 Then','    MsgBox "Failed: " & stepName & vbCrLf & "Error " & Err.Number & ": " & Err.Description & vbCrLf & "The new drawing has not been verified. Check the installed Visio/font environment.", vbCritical, "WrapItfUp"','    WScript.Quit 1','  End If','End Sub']));return v.join('\r\n');
 }
-const api={text,bounds,svg,vbs,unit};root.WIUDiagramScene=api;if(typeof module==='object')module.exports=api;
+const api={text,bounds,svg,vbs,unit,clockMarker,clockIconSvg,clockStyle,pinWidthLabel};root.WIUDiagramScene=api;if(typeof module==='object')module.exports=api;
 })(globalThis);

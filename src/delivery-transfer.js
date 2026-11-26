@@ -55,7 +55,7 @@
   }
   function receipt(transfer,text){
     const lines=String(text).split(/\r?\n/).map(s=>s.trim()),complete=lines.includes('COMPLETE: '+transfer.directory),hashes=lines.includes('Verified '+transfer.files.length+' files and all SHA-256 hashes.');
-    const received=complete||lines.some(line=>{const m=/^RECEIVED (\d+)\/(\d+)(?: |$)/.exec(line);return m&&Number(m[1])===transfer.chunks.length&&Number(m[2])===transfer.chunks.length;});
+    const received=complete||lines.some(line=>{const m=/^RECEIVED (\d+)\/(\d+) package=([a-f0-9]{64})(?: |$)/.exec(line);return m&&m[3]===transfer.id&&Number(m[1])===transfer.chunks.length&&Number(m[2])===transfer.chunks.length;});
     return {received,verified:complete&&hashes,generation:'unverified',compile:'unverified',simulation:'unverified'};
   }
   return {prepare,sha,shaFallback,receipt};

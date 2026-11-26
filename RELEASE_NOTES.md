@@ -1,4 +1,63 @@
+# WrapItfUp r140 — 霧玫瑰 Clock 與編輯區分離
+
+- 採用 A 霧玫瑰: 細圓圈與方波 #A65F86, 淡底 #F8EAF1. 未啟用為灰色虛線圓, 焦點框收在點選區內.
+- Clock, 方向箭頭與名稱分開配置, 左右鏡射且不限制接腳方向. 名稱編輯不再蓋住拖曳/刪除工具或相鄰訊號.
+- 縮小畫面時點名稱會先放大至可讀比例. 可用「返回原視野」還原鏡頭, 不改專案間距或接線.
+- 介面圖, Top 圖, SVG 與 VBS 使用共用 Clock 幾何與配色. Top 單色模式保留.
+- 修正重新載入後僅物件欄位順序不同就誤擋連續復原的問題. 真正資料衝突仍會阻擋.
+- [本版驗證與限制](docs/VERIFICATION-r140.md).
+
+The selected dusty-rose Clock glyph is shared across live controls and diagram exports. Reserved hit targets and camera-based text focus keep editing local and readable. Clock type metadata, electrical inputs and generator behavior are preserved.
+
+# WrapItfUp r139 — Clock 開關狀態辨識
+
+Clock 未啟用時顯示灰色空心虛線圓, 啟用時顯示黑底白色方波. Hover 與焦點只標示操作外框, 避免編輯文字時看起來像已啟用 Clock. 既有顯示時機與切換行為不變.
+
+Inactive Clock controls use a dashed outline; active controls use a black disc and a white square wave. Hover and focus do not alter the state symbol. [Verification](docs/VERIFICATION-r139.md).
+
+# WrapItfUp r138 — 圖上名稱編輯與 Clock 標記
+
+- 修正縮小圖面後, 右側訊號名稱的編輯框偏移與文字裁切. 左右名稱都固定接腳側邊緣, 放大的編輯框向 block 內延伸.
+- 接腳旁的圓圈方波可直接切換 Clock. 取消時恢復原本類型, 包括 1-bit Data; 不改接線方向或位寬.
+- 圖上操作和訊號表共用類型更新邏輯, 支援復原, 重做與專案保存.
+- [本版驗證與範圍](docs/VERIFICATION-r138.md).
+
+Right-side inline editing keeps its port-side anchor and exposes the readable input at reduced zoom. Direct Clock controls preserve the previous non-clock type, electrical data and generator output.
+
+# WrapItfUp r137 — 訊號複製貼上
+
+- 整個訊號使用系統剪貼簿在 WrapItfUp 與 WaveASecond 間複製貼上，每次貼上都新增。
+- 波形類型、已知位寬及群組透過共用格式傳遞。目的網站沿用自己的預設與歷史操作。
+- 1-bit Data 保留使用者選擇，跨站貼到 WaveASecond 使用全圖時間軸。
+- 兩站共 494 項回歸測試及建置/發佈檢查通過. Chrome 已實測雙向複製貼上, 整批復原與文字/波形格分流. 41 份 RTL/org/設定產物與 r136 相同. 未重跑公司 Linux 或 Windows Visio. [完整驗證紀錄](docs/CLIPBOARD-VERIFICATION.md).
+
+- 子模組圖與 Top 圖統一只顯示 pin 名，線段標示多位元寬度，Clock 接腳顯示圓圈方波。
+
 # WrapItfUp release notes / 版本紀錄
+
+## Public r136
+
+Top 接線圖可直接編輯整條 net 名稱及各分支的圖面標籤. 選線時在畫布下方顯示 Driver 和 Load 的完整路徑. 擁擠設計可以預覽分配走線空間後的結果, 確認再套用. 接線表保留同一端點的多段切片, 同一設計的位寬解析與工作包檢查結果共用.
+
+Linux verification attempts retain separate records for each implementation and device. An older run can be verified again without changing which generation is latest. Transfer receipts identify their package. [Verification](docs/VERIFICATION-r136.md)
+
+## Public r135 — 2026-11-25
+
+工作包 org 恢復分節、群組及註解。Top I/O 依原宣告次序連續列出，接線可就近核對。修正純量與等效單位元子模組接腳的回讀誤報，以及不同交付頁面顯示的參數、Empty 和 org 預覽資訊。
+
+Individual and packaged exports use the same org layout. Section and group comments survive import and export, and active conditional sources retain their existing validation. [Verification](docs/VERIFICATION-r135.md)
+
+## Public r134 — 2026-11-18
+
+Top 接線圖點選單一 net 後直接並列兩端完整路徑，名稱可換行，支援多 Load 選擇與定位。一般草稿／組態狀態收於專案選單，草稿失敗或有未套用輸入時仍會直接提示。背景整理完成時釋出整列空間，幾何檢查仍可從畫布底部開啟。
+
+The child sheet now previews, copies and downloads the same physical RTL source used by the package, including file-level directives and module bodies. Declaration-only editing and copying remain available. [Verification](docs/VERIFICATION-r134.md).
+
+## Public r133 — 2026-11-18
+
+新增獨立的 Group 接線圖。勾選要展示的 instance／group 後，可將目前畫面匯出成 SVG 或 PNG。群組之間的多條 net 合成一條線，保留 fanout、正反向與不同 instance 的識別。
+
+The Top toolbar now includes a presentation view with per-instance group selection, merged edges, distinct-net counts and directional arrows. Both ends must have a group. The export uses the displayed subset. See [verification and scope](docs/VERIFICATION-r133.md).
 
 ## Public r132 — 2026-11-17
 

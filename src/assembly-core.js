@@ -457,6 +457,16 @@
     return '// WIU configuration '+D.marker(p.defineConfig)+'; Top expressions are expanded for this configuration.\n// Compile ALL child RTL with the same define configuration; Top inclusion alone is not sufficient across compilation units.\n'+(org?'// gen_top: supply -I '+name+' using your project generation script.\n':'`include "'+name+'"\n')+'\n';
   }
   function orgDirectiveNet(n) {return '// realtek '+n.direction+' '+n.name+(canonicalRange(n.range)?'.'+canonicalRange(n.range).replace(/\s/g,''):'');}
+  function orgGeneratedBlocks(p, omitEmptyAssigns=false){
+    const lines=[];
+    nativeSections(p,true).forEach((section,index)=>{
+      if(index===4 && omitEmptyAssigns && !section)return;
+      lines.push('// realtek begin',section,'// realtek end','');
+      // Body parameters must survive regeneration.
+      if(index===2)for(const x of topParameters(p))lines.push((x.local?'localparam ':'parameter ')+(x.type?'integer ':'')+x.name+' = '+x.value+';');
+    });
+    return lines;
+  }
   function exportOrg(project,options) {
     assertExport(project,options,'org');
     const p=D?D.resolveProject(project).project:project,mapping=instanceMapping(p),byId=new Map(mapping.map(x=>[x.id,x]));
@@ -479,12 +489,7 @@
     arr(p.assigns).forEach(a=>lines.push('// realtek assign '+a.target+' = '+a.expr+';'));
     if(str(p.advanced).trim())lines.push('',str(p.advanced).trim());
     lines.push('');
-    nativeSections(p,true).forEach((section,index)=>{
-      lines.push('// realtek begin',section,'// realtek end','');
-      // Body declarations survive company regeneration. Do not place Top parameters
-      // in the generated header or net-declaration section.
-      if(index===2)for(const x of topParameters(p))lines.push((x.local?'localparam ':'parameter ')+(x.type?'integer ':'')+x.name+' = '+x.value+';');
-    });
+    lines.push(...orgGeneratedBlocks(p));
     return lines.join('\n');
   }
   function demoProject() {
@@ -496,5 +501,5 @@
     for(const m of p.modules)m.interfaceOnly=true;
     p.assigns=[{id:'a_reset',target:'srst_etn',expr:'~fpga_rstb'}];return p;
   }
-  return {newProject,validate,exportVerilog,exportOrg,renderVerilog:(p,o)=>exportVerilog(p,Object.assign({},o,{allowErrors:true})),renderOrg:(p,o)=>exportOrg(p,Object.assign({},o,{allowErrors:true})),projectView:p=>D?D.resolveProject(p).project:p,expandDefines:(s,p)=>D&&p.defineConfig?D.expandValue(s,p.defineConfig):s,demoProject,parseExpression,evaluateInteger,parseRange,resolveParameters,instanceParameterRows,expressionInfo,instanceMapping,standardNamesPlan,validName,FORMAT_OPTIONS};
+  return {newProject,validate,exportVerilog,exportOrg,assertExport,orgGeneratedBlocks,orgDirectiveNet,renderVerilog:(p,o)=>exportVerilog(p,Object.assign({},o,{allowErrors:true})),renderOrg:(p,o)=>exportOrg(p,Object.assign({},o,{allowErrors:true})),projectView:p=>D?D.resolveProject(p).project:p,expandDefines:(s,p)=>D&&p.defineConfig?D.expandValue(s,p.defineConfig):s,demoProject,parseExpression,evaluateInteger,parseRange,resolveParameters,instanceParameterRows,expressionInfo,instanceMapping,standardNamesPlan,validName,FORMAT_OPTIONS};
 });

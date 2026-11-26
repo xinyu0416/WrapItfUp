@@ -94,9 +94,8 @@ root.WIUWorkflowPanel=function(h){
     });
     $('#f-repeat-module').addEventListener('change',e=>{$('#f-repeat-base').value=e.target.value+'_inst_';});
   }
-  function parameters(){const p=get(),params=Array.isArray(p.parameters)?p.parameters:Object.entries(p.parameters||{}).map(([name,value])=>({name,value:String(value)}));h.openDialog('Top 參數','<p class="a-note a-warn">Top parameter 可保留於網站 RTL，但公司 gen_top 重產尚未驗證，工作包會阻擋匯出。公司流程請使用子模組參數與 instance 覆寫。<\/p><p>每行 <code>名稱 = 值<\/code>，例如 <code>DATA_W = 64<\/code>。內部常數可寫 <code>localparam NAME = 值<\/code>。給單個 instance 的覆寫值，請到「放入模組」展開「已放入 Top」，在對應 instance 的「設定」填入。<\/p><textarea id="f-parameters" spellcheck="false">'+esc(params.map(x=>(x.local?'localparam ':'')+x.name+' = '+x.value).join('\n'))+'<\/textarea>','預覽參數',()=>{const rows=$('#f-parameters').value.split(/\n/).filter(x=>x.trim()).map(x=>{const m=/^\s*(?:(localparam|parameter)\s+)?([A-Za-z_][\w$]*)\s*=\s*(.+?)\s*$/.exec(x);if(!m)throw Error('每行需為 名稱 = 值。');const old=params.find(p=>p.name===m[2]);return {...(old||{}),name:m[2],value:m[3],local:m[1]==='localparam'};});if(new Set(rows.map(x=>x.name)).size!==rows.length)throw Error('參數名稱重複。');const p=A.clone(get());p.parameters=rows;const ctx=C.resolveParameters({parameters:C.projectView(p).parameters},{});if(ctx.errors.length)throw Error(ctx.errors.map(x=>x.message||x).join('\n'));applyPlan('核對 Top 參數',{project:p,changes:rows.map(x=>x.name+' = '+x.value),issues:[]},'ports');});}
+  function parameters(){const p=get(),params=Array.isArray(p.parameters)?p.parameters:Object.entries(p.parameters||{}).map(([name,value])=>({name,value:String(value)}));h.openDialog('Top 參數','<p class="a-note a-warn">Top parameter 和 localparam 會寫入 org 的 module 內、生成區外。每個 instance 的參數覆寫在實例設定中調整。<\/p><p>每行 <code>名稱 = 值<\/code>，例如 <code>DATA_W = 64<\/code>。內部常數可寫 <code>localparam NAME = 值<\/code>。給單個 instance 的覆寫值，請到「放入模組」展開「已放入 Top」，在對應 instance 的「設定」填入。<\/p><textarea id="f-parameters" spellcheck="false">'+esc(params.map(x=>(x.local?'localparam ':'')+x.name+' = '+x.value).join('\n'))+'<\/textarea>','預覽參數',()=>{const rows=$('#f-parameters').value.split(/\n/).filter(x=>x.trim()).map(x=>{const m=/^\s*(?:(localparam|parameter)\s+)?([A-Za-z_][\w$]*)\s*=\s*(.+?)\s*$/.exec(x);if(!m)throw Error('每行需為 名稱 = 值。');const old=params.find(p=>p.name===m[2]);return {...(old||{}),name:m[2],value:m[3],local:m[1]==='localparam'};});if(new Set(rows.map(x=>x.name)).size!==rows.length)throw Error('參數名稱重複。');const p=A.clone(get());p.parameters=rows;const ctx=C.resolveParameters({parameters:C.projectView(p).parameters},{});if(ctx.errors.length)throw Error(ctx.errors.map(x=>x.message||x).join('\n'));applyPlan('核對 Top 參數',{project:p,changes:rows.map(x=>x.name+' = '+x.value),issues:[]},'ports');});}
   function standard(){const p=A.clone(get()),plan=C.standardNamesPlan(p);const changes=plan.changes||plan.mappings||[];for(const x of changes){const i=p.instances.find(i=>i.id===(x.id||x.instance));if(i){i.name=x.after||x.to||x.name;delete i.nameBinding;}}applyPlan('核對 gen_top 標準 instance 名稱',{project:plan.project||p,changes:changes.map(x=>(x.before||x.from)+' → '+(x.after||x.to||x.name)),issues:(plan.conflicts||[]).map(x=>({...x,severity:'error'}))});}
-  function bundleIssues(){try{return B.validate(get());}catch(e){return {errors:[{message:e.message}],warnings:[],outputs:[]};}}
   function deliveryOverview(p,cfg,outs){
     const values=outs.slice(0,3).map(o=>'<code>'+esc(o.port+' = '+o.expr)+'<\/code>（'+(o.defaulted?'預設':'自訂')+'）').join('、')+(outs.length>3?'，其餘 '+(outs.length-3)+' 個請看核對表':'');
     return '<section class="ux-file-purpose" aria-label="正常設計與可選 Empty 的差別"><h3>一般使用，從正常 Top 開始<\/h3><dl><div><dt>正常設計<\/dt><dd><code>'+esc(p.top)+'.v<\/code> ＋子模組，保留你設定的接線。使用 ASIC define；FPGA 模擬再加入 FPGA define。<\/dd><\/div><div><dt>可選 Empty<\/dt><dd><code>'+esc(p.top)+'.empty.v<\/code> 保留同名模組的介面，替換其內部實作；原本的子模組與接線不保留。<code>.output.cfg<\/code> 只設定這份暫代電路'+(values?'；目前為 '+values:'')+'。<\/dd><\/div><\/dl><p class="a-hint">若 '+esc(p.top)+' 被 chip_top 引用，它就是 chip_top 的子模組；Empty 可作為該子模組的暫代版本。正常與 Empty 擇一編譯。單一輸出留空 <code>.pin()<\/code> 是另一件事，仍保留正常模組功能。<\/p><button data-action="bundle-review">核對實際接線、留空與 Empty 值<\/button><\/section>';
@@ -171,11 +170,10 @@ root.WIUWorkflowPanel=function(h){
     return rows;
   }
   function linuxBundle(){
-    const p=get(),v=bundleIssues(),cfg={...B.normalize(p.bundleConfig),dualMode:true,includeReferences:false};let entries=[];
-    if(!v.errors.length)try{entries=K.files(p,cfg);}catch(e){v.errors.push(...(e.issues?.length?e.issues:[{message:e.message}]));}
+    const p=get(),{validation:v,entries}=packageReview(),cfg=B.normalize(p.bundleConfig);
     const c=K.scriptConfig(p),outputPorts=(p.nets||[]).filter(n=>n.direction==='output'),custom=outputPorts.filter(o=>cfg.outputTies.some(t=>t.port===o.name)).length;
     const visibleErrors=v.errors.filter((issue,index,all)=>all.findIndex(other=>(other.message||other.reason||String(other))===(issue.message||issue.reason||String(issue)))===index);
-    const fixes=visibleErrors.map(issue=>{const code=issue.code||'',missingSource=/(?:缺少.+RTL\s*原始碼|Missing.+RTL)/i.test(issue.message||issue.reason||''),action=/^COMPANY_SCRIPT_/.test(code)?'bundle-script-settings':/^COMPANY_/.test(code)?'readme':missingSource?'import-rtl':code==='BUNDLE_INSTANCE_NAME'?'flow-standard-names':['BUNDLE_TOP_PARAMETER','ORG_TOP_PARAMETERS'].includes(code)?'flow-parameters':/^STUB_/.test(code)?'bundle-stub-edit':/^PROFILE_/.test(code)?'bundle-profile-options':'review';return '<div class="a-note a-warn ux-bundle-issue"><span>'+esc(issue.message||issue.reason||issue)+'<\/span><button data-action="'+action+'">'+(action==='bundle-script-settings'?'修改執行設定':action==='review'?'定位接線問題':'前往修正')+'<\/button><\/div>';}).join('');
+    const fixes=visibleErrors.map(issue=>{const code=issue.code||'',missingSource=/(?:缺少.+RTL\s*原始碼|Missing.+RTL)/i.test(issue.message||issue.reason||''),action=code==='COMPANY_NO_INSTANCES'?(p.modules.length?'flow-instances':'wb-add'):/^COMPANY_SCRIPT_/.test(code)?'bundle-script-settings':/^COMPANY_/.test(code)?'readme':missingSource?'import-rtl':code==='BUNDLE_INSTANCE_NAME'?'flow-standard-names':['BUNDLE_TOP_PARAMETER','ORG_TOP_PARAMETERS'].includes(code)?'flow-parameters':/^STUB_/.test(code)?'bundle-stub-edit':/^PROFILE_/.test(code)?'bundle-profile-options':'review';return '<div class="a-note a-warn ux-bundle-issue"><span>'+esc(issue.message||issue.reason||issue)+'<\/span><button data-action="'+action+'">'+(action==='flow-instances'?'加入實例':action==='wb-add'?'新增子模組':action==='readme'?'查看相容性說明':action==='bundle-script-settings'?'修改執行設定':action==='review'?'定位接線問題':'前往修正')+'<\/button><\/div>';}).join('');
     return '<div class="r69-package-head"><div><h2>交付目前設計<\/h2><p>選擇搬到 Linux 的方式；設定與材料都會一起帶走。<\/p><\/div><span class="r69-package-count">'+(visibleErrors.length?visibleErrors.length+' 項待修正':entries.length+' 份工作檔案')+'<\/span><\/div>'+
       (v.errors.length?'<section class="ux-bundle-blockers" aria-label="下載前必須修正">'+fixes+'<\/section>':'<p class="r94-status">✓ 設計檢查完成 · Linux 產生／編譯／模擬待驗證<\/p>')+
       '<div class="r69-delivery-methods"><button class="a-primary a-bundle-cta" data-action="bundle-download" '+(v.errors.length?'disabled':'')+'>下載 Linux 工作包<\/button><button data-action="linux-transfer" '+(v.errors.length?'disabled':'')+'>無法傳 ZIP？用文字傳送<\/button>'+root.WIUExperience.commandButton('bundle-show-files',{disabled:!entries.length})+'</div>'+
@@ -208,12 +206,12 @@ root.WIUWorkflowPanel=function(h){
     ];
   }
   function emptyDelivery(){
-    const p=get(),v=B.validate(p),custom=v.outputs.filter(x=>!x.defaulted).length;
+    const p=get(),v=K.emptyValidation(p),custom=v.outputs.filter(x=>!x.defaulted).length;
     return '<section class="r118-delivery-panel"><h2>Empty 暫代電路</h2><p>保留 Top 對外介面，輸出依 cfg 設定。這份暫代 RTL 不保留正常 Top 的子模組與接線；正常與 Empty 擇一編譯。</p>'+
       '<div class="a-actions"><button data-action="bundle-stub-edit" '+(!v.outputs.length&&!B.normalize(p.bundleConfig).outputTies.length?'disabled':'')+'>設定 Empty 輸出</button><button data-action="bundle-cfg-import" '+(!v.outputs.length?'disabled':'')+'>匯入 output.cfg</button></div>'+
       '<p>'+v.outputs.length+' 個 outputs · '+custom+' 個自訂 · '+(v.outputs.length-custom)+' 個預設全 0</p>'+
-      (v.errors.length?errors(v.errors):'<p class="r94-status">Empty 表達式檢查通過 · 網站生成，尚未在公司工具執行</p>')+
-      '<div class="a-actions"><button class="a-primary" data-action="delivery-empty-download" '+(v.errors.length?'disabled':'')+'>下載 Empty RTL＋cfg</button><button data-action="delivery-empty-preview" '+(v.errors.length?'disabled':'')+'>預覽／複製 Empty RTL</button><button data-action="delivery-empty-cfg-preview" '+(v.errors.length?'disabled':'')+'>預覽／複製 cfg</button></div>'+
+      (v.errors.length?'<p>Empty 檢查結果 · '+(v.currentErrors.length?'目前組態待修正':'目前組態可下載，Linux 工作包另有待修正項目')+'</p>'+errors(v.errors):'<p class="r94-status">Empty 表達式檢查通過 · 網站生成，尚未在公司工具執行</p>')+
+      '<div class="a-actions"><button class="a-primary" data-action="delivery-empty-download" '+(v.currentErrors.length?'disabled':'')+'>下載 Empty RTL＋cfg</button><button data-action="delivery-empty-preview" '+(v.currentErrors.length?'disabled':'')+'>預覽／複製 Empty RTL</button><button data-action="delivery-empty-cfg-preview" '+(v.currentErrors.length?'disabled':'')+'>預覽／複製 cfg</button></div>'+
       (v.warnings.length?'<details><summary>'+v.warnings.length+' 項提醒</summary>'+errors(v.warnings)+'</details>':'')+
       '<p class="a-hint">要在公司 gen_empty 重新產生，切換至「Linux 工作包」，此處的 cfg 設定會一起帶入。</p></section>';
   }
@@ -349,7 +347,19 @@ root.WIUWorkflowPanel=function(h){
       });
     });
   }
-  function files(){return K.files(get(),{...B.normalize(get().bundleConfig),includeReferences:false});}
+  let reviewedPackage;
+  function packageReview(){
+    const p=get(),signature=JSON.stringify(p);
+    if(reviewedPackage?.signature!==signature){
+      reviewedPackage={signature,result:K.inspectPackage(p,p.bundleConfig)};
+    }
+    return reviewedPackage.result;
+  }
+  function files(){
+    const {entries,validation}=packageReview();
+    if(validation.errors.length)throw Error(validation.errors.map(x=>x.message).join('\n'));
+    return entries;
+  }
   function referenceFiles(){return B.referenceFiles(get());}
   function references(){const list=referenceFiles();h.openDialog('gen_top 教學原始程式與完整文件','<p>這裡可隨時查閱或下載，不需要先完成接線。原始程式保留不變，操作說明為英文。公司 binary 與尚未提供的 ASIC define 原檔不在其中。<\/p><div class="a-file-list">'+list.map((f,i)=>'<div><code>'+esc(f.path)+'<\/code><span>'+esc(f.description)+'<\/span><\/div>').join('')+'<\/div>');}
   const actions={

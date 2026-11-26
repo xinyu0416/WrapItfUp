@@ -16,14 +16,14 @@ function layout(project){
     const signal=diagram.signals[side].find(s=>s.id===port.id),g=diagram.groups[side].find(g=>g.id===signal?.groupId),gid=g?.id||'';
     if(gid!==last){if(gs.length&&gs.at(-1).side===side)gs.at(-1).bottom=y-8;if(g){y+=44;const key=D.groupKey(instance.id,side,g.id),name=root.WIUWorkbook.groupLabel(diagram,side,g.id);gs.push({key,id:g.id,name,side,y:y-40,bottom:y,color:D.color(project,key,diagram.groups[side].indexOf(g),g.name,g.color),moduleId:module.id,instanceName:instance.name,members:[]});half=Math.max(half,measure(name,12)+40);}last=gid;}
     const comment=String(signal?.comment||port.comment||''),lines=comment?comment.split(/\r?\n/):[];
-    half=Math.max(half,measure(port.name+(port.range||''),12)+48,...lines.map(s=>measure(s,10)+40));
+    half=Math.max(half,measure(port.name,12)+48+(port.waveType==='clock'?20:0),...lines.map(s=>measure(s,10)+40));
     columns[side].push({port,y,index,comment:lines,group:gid});if(gid){const gg=gs.findLast(g=>g.side===side&&g.id===gid);gg.members.push(port.name);}
     y+=32+lines.length*15;if(gid)gs.findLast(g=>g.side===side&&g.id===gid).bottom=y-8;
    });columns[side].height=y+16;
   }
   return [IL.bar(project,{instance,module,sides,columns,parameterRows,parameterHeight,groups:gs,width:Math.ceil(half)*2+28,height:Math.max(columns.left.height,columns.right.height,140)},measure)];
  });
- const families=[...new Set(preliminary.map(b=>b.module.id))],columnWidth=Math.max(480,...preliminary.filter(b=>b.shape!=='bar').map(b=>b.width)),ys=families.map(()=>130),outer=Math.max(290,...project.nets.filter(n=>n.direction!=='wire').map(n=>measure(n.name+(n.range||''))+42));
+ const families=[...new Set(preliminary.map(b=>b.module.id))],columnWidth=Math.max(480,...preliminary.filter(b=>b.shape!=='bar').map(b=>b.width)),ys=families.map(()=>130),outer=Math.max(290,...project.nets.filter(n=>n.direction!=='wire').map(n=>measure(n.name)+42));
  const result=preliminary.map((b,index)=>{const col=families.indexOf(b.module.id),saved=project.workbook?.graphPositions?.[b.instance.id],x=Number.isFinite(saved?.x)?Math.max(350,saved.x):outer+520+col*(columnWidth+900),y=Number.isFinite(saved?.y)?Math.max(80,saved.y):ys[col];ys[col]=Math.max(ys[col],y+b.height+80);return {...b,x,y};});
  let bottom=Math.max(130,...result.filter(b=>b.shape!=='bar').map(b=>b.y+b.height))+180;for(const b of result.filter(b=>b.shape==='bar'))if(!project.workbook?.graphPositions?.[b.instance.id]){b.x=Math.min(800,...result.filter(x=>x.shape!=='bar').map(x=>x.x));b.y=bottom;bottom+=b.height+180;}return result;
 }

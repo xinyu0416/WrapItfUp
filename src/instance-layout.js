@@ -18,11 +18,11 @@ function bar(p,b,measure){
  const columns={top:[],bottom:[]},gs=[];let width=0,maxRows=1;
  for(const side of ['top','bottom']){let x=18;
   for(const g of groups.filter(g=>g.side===side)){
-   const compact=cfg.compact&&!cfg.expanded?.includes(g.key),labelWidth=Math.max(126,...g.members.map(port=>measure(port.name+(port.range||''),12)+50));
-   const gw=Math.max(measure(g.name,12)+32,labelWidth+28*g.members.length+26);
+   const compact=cfg.compact&&!cfg.expanded?.includes(g.key),labelWidth=Math.max(126,...g.members.map(port=>measure(port.name,12)+50));
+   const gw=Math.max(measure(g.name,12)+32,labelWidth+36*g.members.length+26);
    const rows=compact?0:g.members.length;maxRows=Math.max(maxRows,rows);
    gs.push({...g,x,width:gw,compact,labelWidth});
-   g.members.forEach((port,i)=>columns[side].push({port,x:x+labelWidth+14+i*28,index:i,group:g.key,compact}));
+   g.members.forEach((port,i)=>columns[side].push({port,x:x+labelWidth+18+i*36,index:i,group:g.key,compact}));
    x+=gw+18;
   }width=Math.max(width,x);
  }

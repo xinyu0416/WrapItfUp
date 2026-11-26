@@ -165,6 +165,8 @@
   function importOrg(source, suppliedModules, options){
     source=String(source||'');suppliedModules=Array.isArray(suppliedModules)?suppliedModules:[];
     const issues=[],project={schema:1,top:'top',modules:suppliedModules.map(m=>Object.assign({},m)),instances:[],nets:[],connections:[],assigns:[],formats:[],advanced:'',prelude:'',originalOrg:source,importUnresolved:[]};
+    const layoutApi=globalThis.WIUOrgLayout||(typeof require==='function'?require('./org-layout'):null);
+    const layout=layoutApi.reader(), netNotes=new Map(), layoutLines=new Set();
     const lines=source.split(/\r?\n/),active=[],raw=[],generated=[];let inGenerated=false,inC=false,conditionalDepth=0,blockComment=false,seq=0;
     const id=(kind)=>'import_'+kind+'_'+(++seq);
     const unresolved=(code,message,extra)=>{const e=issue(issues,'warning',code,message,Object.assign({blocking:true},extra));project.importUnresolved.push(e);return e;};
@@ -189,7 +191,7 @@
       if(!inGenerated&&!inC&&!conditionalDepth){const end=emptyFpgaSectionEnd(i);if(end>=0){
         const fragment={kind:'empty-fpga-placeholder',line:i+1,source:lines.slice(i,end+1).join('\n')};
         (project.importPreservedFragments||(project.importPreservedFragments=[])).push(fragment);
-        issue(issues,'warning','EMPTY_FPGA_SECTION_PRESERVED','空的 FPGA 區塊沒有接線或邏輯作用；原文保存在匯入來源，重新生成時省略這個空區塊。',{line:i+1,blocking:false});
+        issue(issues,'warning','EMPTY_FPGA_SECTION_PRESERVED','空的 FPGA 區塊沒有接線或邏輯作用；原文已保存，工作包會保留這個空區塊。',{line:i+1,blocking:false});
         i=end;continue;
       }}
       if(!inGenerated&&!inC&&/^\s*`(?:ifdef|ifndef)\b/.test(line)){conditionalDepth++;raw.push(line);if(conditionalDepth===1)unresolved('CONDITIONAL_SOURCE_PRESERVED','條件編譯區段完整保留，未將其中指令視為無條件連線。',{line:i+1});continue;}
@@ -199,8 +201,18 @@
       if(inGenerated){generated.push(line);continue;}
       if(inC){raw.push(line);if(m&&m[1]==='c_code'&&(m[2]||'').trim()==='end')inC=false;continue;}
       if(m&&m[1]==='c_code'&&(m[2]||'').trim()==='begin'){inC=true;raw.push(line);unresolved('C_CODE_PRESERVED','C code 已保留，僅由公司 gen_top 執行；直接 Verilog 不包含其執行結果。',{line:i+1});continue;}
-      if(m)active.push({kind:m[1],args:(m[2]||'').trim(),line:i+1,raw:line});else raw.push(line);
+      if(m){
+        const meta=['input','output','inout','port','wire'].includes(m[1])?layout.member():null;
+        active.push({kind:m[1],args:(m[2]||'').trim(),line:i+1,raw:line,meta});
+      }else{
+        const note=/^\s*\/\/ Note ([A-Za-z_][\w$]*) \| (.*)$/.exec(line);
+        const consumed=note||layout.consume(line);
+        if(note)netNotes.set(note[1],note[2]);
+        if(!consumed)raw.push(line);
+        else if(options?.recoverSavedLayout){layoutLines.add(raw.length);raw.push(line);}
+      }
     }
+    layout.finish();project.orgLayout=layout.layout;
     if(conditionalDepth)unresolved('CONDITIONAL_BOUNDARY','條件編譯缺少 endif。');
     if(inGenerated)unresolved('GENERATED_BOUNDARY','realtek begin 缺少 end。');if(inC)unresolved('C_CODE_BOUNDARY','c_code begin 缺少 end。');
     const fullRtl=parseRtl(source),topMod=fullRtl.modules[0];if(topMod){project.top=topMod.name;if(topMod.parameters.length)project.parameters=topMod.parameters.map(p=>Object.assign({},p));}
@@ -233,13 +245,16 @@
       }
     }
     for(const d of active.filter(d=>['input','output','inout','wire','port'].includes(d.kind))){
-      for(const token of tokenize(d.args)){
+      const tokens=tokenize(d.args);
+      for(const token of tokens){
         const m=/^([A-Za-z_][A-Za-z0-9_$]*)(?:\.(\[[\s\S]+\]))?$/.exec(token);if(!m){raw.push('// realtek '+d.kind+' '+token);unresolved('NET_DECLARATION','無法解析 net 宣告：'+token,{line:d.line});continue;}
         const dir=d.kind==='port'?(declMap.get(m[1])||{}).direction:d.kind;
-        addNet(m[1],m[2]||'',dir||'wire',{orgPortAuto:d.kind==='port',orgRangeSpecified:!!m[2],origin:'directive'});
+        const net=addNet(m[1],m[2]||'',dir||'wire',{group:d.meta?.group||'',orgPortAuto:d.kind==='port',orgRangeSpecified:!!m[2],origin:'directive'});
+        if(d.meta?.prior.length && token===tokens[0])project.orgLayout.before[net.id]=d.meta.prior;
         if(d.kind==='port'&&!dir)unresolved('PORT_DIRECTION_UNRESOLVED','port 自動方向尚未解析：'+m[1],{line:d.line});
       }
     }
+    for(const [name,text] of netNotes)if(netMap.has(name))netMap.get(name).comment=text;
     const supported=new Set(['inst','input','output','inout','wire','port','format','conn','assign','param','comment']);
     for(const d of active){
       if(d.kind==='format'){for(const f of tokenize(d.args))if(!project.formats.includes(f))project.formats.push(f);continue;}
@@ -256,7 +271,7 @@
       if(d.kind==='param'){
         for(const token of tokenize(d.args)){const pm=/^([A-Za-z_][A-Za-z0-9_$]*(?:\.\d+(?:-\d+)?)?)\.([A-Za-z_][A-Za-z0-9_$]*)\.([\s\S]+)$/.exec(token);if(!pm){raw.push('// realtek param '+token);unresolved('PARAM_SYNTAX','無法解析 param：'+token,{line:d.line});continue;}const parameterInstances=instancesFor(pm[1],d.line);if(!parameterInstances.length)raw.push('// realtek param '+token);for(const inst of parameterInstances){if(Object.prototype.hasOwnProperty.call(inst.parameters,pm[2]))unresolved('DUPLICATE_PARAM','重複 parameter override：'+token,{line:d.line});inst.parameters[pm[2]]=pm[3];}}continue;
       }
-      if(d.kind==='comment'){const cm=/^([A-Za-z_][A-Za-z0-9_$]*)\.(\/\/[\s\S]*)$/.exec(d.args);if(cm){const n=addNet(cm[1],'',null);n.comment=cm[2].slice(2).trim();}else{raw.push(d.raw);unresolved('COMMENT_SYNTAX','未支援的 comment 已保留：'+d.args,{line:d.line});}continue;}
+      if(d.kind==='comment'){const cm=/^([A-Za-z_][A-Za-z0-9_$]*)\.(\/\/[\s\S]*)$/.exec(d.args);if(cm){const n=addNet(cm[1],'',null);n.comment=cm[2].slice(2).trim();n.orgCommentDirective=true;}else{raw.push(d.raw);unresolved('COMMENT_SYNTAX','未支援的 comment 已保留：'+d.args,{line:d.line});}continue;}
       if(!supported.has(d.kind)){raw.push(d.raw);unresolved('DIRECTIVE_PRESERVED','進階指令已保留，尚未原生解讀：'+d.kind,{line:d.line});}
     }
     const C=typeof WIUCore!=='undefined'?WIUCore:typeof require==='function'?require('./assembly-core.js'):null;
@@ -286,7 +301,7 @@
         if(!shape||n.direction!==port.direction||(n.orgRangeSpecified&&!sameRange(n.range,shape.range))){unresolved('IMPLICIT_TOP_INTERFACE_CONFLICT','同名 Top 接腳與目前 RTL 介面不相容，未自動連接：'+inst.name+'.'+port.name,{instance:inst.id,net:n.id});continue;}
         project.connections.push({id:id('connection'),instance:inst.id,port:port.name,expr:n.name,origin:'implicit-top'});count++;
       }
-      if(count)issue(issues,'warning','IMPLICIT_TOP_BINDINGS_RECONSTRUCTED','依目前 RTL 介面重建 '+inst.name+' 的 '+count+' 條同名 Top 接線；請核對後匯出，新的 org 會明確列出這些 conn。',{instance:inst.id,blocking:false});
+      if(count)issue(issues,'warning','IMPLICIT_TOP_BINDINGS_RECONSTRUCTED','依目前 RTL 介面重建 '+inst.name+' 的 '+count+' 條同名 Top 接線；請核對後匯出，工作包沿用同名 Top 隱式接線。',{instance:inst.id,blocking:false});
     }
     // Omitted directive ranges are inferred only when every directly attached
     // current-source port agrees. This also detects stale generated wire widths.
@@ -294,7 +309,12 @@
       const shapes=project.connections.filter(c=>c.expr===n.name).map(c=>{const inst=project.instances.find(i=>i.id===c.instance),mod=inst&&project.modules.find(m=>m.name===inst.module),port=mod&&(mod.ports||[]).find(p=>p.name===c.port);return port&&portShape(inst,port);});
       if(!shapes.length||shapes.some(s=>!s))continue;
       if(shapes.some(s=>!sameRange(s.range,shapes[0].range)||s.signed!==shapes[0].signed)){unresolved('IMPLICIT_NET_INTERFACE_CONFLICT','未指定範圍的訊號連到不同的 RTL 介面，請明確設定：'+n.name,{net:n.id});continue;}
-      n.range=shapes[0].range;n.signed=shapes[0].signed;n.rangeOrigin='current-rtl';
+      // A width-less directive can connect a scalar to [0:0]. Keep the saved
+      // interface spelling when both address the same single bit.
+      const saved=declMap.get(n.name), inferred=shapes[0].range;
+      const bitZero=range=>range===''||compact(range)==='[0:0]';
+      n.range=saved && bitZero(saved.range) && bitZero(inferred)?saved.range:inferred;
+      n.signed=shapes[0].signed;n.rangeOrigin='current-rtl';
     }
     for(const g of genBindings){
       const inst=project.instances.find(i=>i.name===g.name&&i.module===g.module);
@@ -324,10 +344,11 @@
     for(const c of project.connections){const inst=project.instances.find(i=>i.id===c.instance),mod=inst&&project.modules.find(m=>m.name===inst.module),port=mod&&(mod.ports||[]).find(p=>p.name===c.port);inferFromExpression(c.expr,port&&port.range);}
     for(const a of project.assigns)inferFromExpression(a.target,'');
     const strType=t=>String(t||'').trim();
-    const rawText=raw.join('\n').replace(/^[ \t]*(parameter|localparam)\s+(?:(integer|int)\s+)?([A-Za-z_][\w$]*)\s*=\s*([^;\n]+);[ \t]*$/gm,(line,kind,type,name,value)=>{
+    const advancedText=rows=>rows.join('\n').replace(/^[ \t]*(parameter|localparam)\s+(?:(integer|int)\s+)?([A-Za-z_][\w$]*)\s*=\s*([^;\n]+);[ \t]*$/gm,(line,kind,type,name,value)=>{
       const def=topMod?.parameters.find(p=>p.name===name);
       return def&&!!def.local===(kind==='localparam')&&compact(def.value)===compact(value)&&strType(def.type)===strType(type)?'':line;
-    }).trim();project.advanced=rawText;
+    }).trim();
+    const rawText=advancedText(raw.filter((line,index)=>!layoutLines.has(index)));project.advanced=rawText;
     const rawCode=stripComments(rawText).trim();if(rawCode){project.importLayoutUnsafe=true;unresolved('HANDWRITTEN_CODE_PRESERVED','手寫程式或前處理內容已保留；直接 Verilog 無法保證與公司生成結果等價。');}
     const filename=String(options&&options.filename||'').split(/[\\/]/).pop(),fileTop=filename.replace(/(?:\.v)?\.org$/i,'');
     if(filename&&/^[A-Za-z_][A-Za-z0-9_$]*$/.test(fileTop)){
@@ -337,7 +358,9 @@
     }
     if(!topMod&&project.top==='top'&&fileTop!=='top')unresolved('TOP_NAME_MISSING','未找到 module 名稱，請設定 top 名稱。');
     if(!project.instances.length)issue(issues,'warning','NO_INSTANCES','未找到可解析的 inst 指令；空模組流程需另設定 -noinst。');
-    return {project,issues};
+    const result={project,issues};
+    if(options?.recoverSavedLayout)result.previousAdvanced=advancedText(raw);
+    return result;
   }
   return {parseRtl,importOrg,stripComments,splitTop};
 });

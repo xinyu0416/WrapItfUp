@@ -46,49 +46,98 @@
     });
     return {project:p,log};
   }
-  function org(project,options){
-    const modified=companyCompatibility(project),p=modified.project,resolved=C.projectView(p),mapping=C.instanceMapping(resolved);
-    p.nets=arr(p.nets).map(n=>({...n,comment:'',group:''}));
-    p.formats=[...new Set(formats.concat(arr(p.formats)))];
-    const upper=arr(resolved.nets).some(n=>/[A-Z]/.test(n.name))||arr(resolved.modules).some(m=>arr(m.ports).some(n=>/[A-Z]/.test(n.name)));
-    const keepCase=upper||p.formats.includes('case_sensitive');
-    const raw=C.exportOrg(p,options),lines=raw.split('\n'),out=[],grouped=new Map();let inGenerated=false,inserted=false,formatsAdded=false,section=0;
-    for(const c of arr(resolved.connections)){
-      const inst=mapping.find(m=>m.id===c.instance);if(!inst)continue;
-      const mod=arr(resolved.modules).find(m=>m.name===inst.module),port=mod&&arr(mod.ports).find(n=>n.name===c.port);
-      const expr=String(c.expr||'').replace(/\s/g,'');
-      const same=arr(resolved.nets).some(n=>n.direction!=='wire'&&n.name===c.port&&n.name===expr);
-      if(same)continue;
-      const key=expr||'""',prefix=p.formats.includes('connect_with_direction')&&port?({input:'i:',output:'o:',inout:'io:'}[port.direction]||''):'';
-      if(!grouped.has(key))grouped.set(key,[]);
-      grouped.get(key).push(prefix+inst.endpoint+'.'+c.port);
+  function org(project, options){
+    const L=globalThis.WIUOrgLayout||(typeof require==='function'?require('./org-layout'):null);
+    const {project:compatible}=companyCompatibility(B.orgSnapshot(project));
+    C.assertExport(compatible,options,'org');
+    const p=C.projectView(compatible), mapping=C.instanceMapping(p);
+    const ports=p.nets.filter(n=>n.direction!=='wire'), wires=p.nets.filter(n=>n.direction==='wire');
+    const instMap=new Map(mapping.map(m=>[m.id,m]));
+    const pins=new Map(p.modules.map(m=>[m.name,new Map(m.ports.map(pin=>[pin.name,pin]))]));
+    const topPorts=new Map(ports.map(n=>[n.name,n])), wireNames=new Set(wires.map(n=>n.name));
+    const selectedFormats=new Set([...formats,...arr(p.formats)]);
+    if(p.nets.some(n=>/[A-Z]/.test(n.name))||p.modules.some(m=>m.ports.some(n=>/[A-Z]/.test(n.name))))selectedFormats.add('case_sensitive');
+    const connections=new Map(), byWire=new Map(), bindings=new Map(), overrides=new Map(p.instances.map(i=>[i.id,Object.keys(i.parameters||{}).length]));
+    for(const c of p.connections){
+      const inst=instMap.get(c.instance);
+      if(!inst)continue;
+      const pin=pins.get(inst.module)?.get(c.port),expr=String(c.expr||'').replace(/\s/g,'');
+      if(expr===c.port && pin && topPorts.get(expr)?.direction===pin.direction)continue;
+      const key=expr||'""';
+      if(!connections.has(key)){
+        connections.set(key,[]);
+        // Whole nets and constant slices can be reviewed with a single declaration.
+        const base=/^([A-Za-z_][\w$]*)(?:\[\d+(?::\d+)?\])?$/.exec(key)?.[1];
+        if(wireNames.has(base)){
+          if(!byWire.has(base))byWire.set(base,[]);
+          byWire.get(base).push(key);
+        }
+      }
+      const prefix=selectedFormats.has('connect_with_direction')&&pin?({input:'i:',output:'o:',inout:'io:'}[pin.direction]||''):'';
+      connections.get(key).push(prefix+inst.endpoint+'.'+c.port);
+      if(wireNames.has(expr)){
+        if(!bindings.has(expr))bindings.set(expr,[]);
+        bindings.get(expr).push({pin,overridden:overrides.get(c.instance)});
+      }
     }
-    for(const line of lines){
-      if(/^\/\/ realtek begin$/.test(line)){inGenerated=true;section++;if(section===7&&!arr(p.assigns).length)continue;out.push(line);continue;}
-      if(/^\/\/ realtek end$/.test(line)){inGenerated=false;if(section===7&&!arr(p.assigns).length)continue;out.push(line);continue;}
-      if(inGenerated&&section===7&&!arr(p.assigns).length)continue;
-      if(/^\/\/ (?:WIU |Edit directives |Compile ALL |gen_top:)/.test(line))continue;
-      if(!inGenerated&&line.startsWith('// realtek format ')){
-        if(!formatsAdded){for(const name of p.formats)out.push('// realtek format '+name);if(keepCase&&!p.formats.includes('case_sensitive'))out.push('// realtek format case_sensitive');formatsAdded=true;}
-        continue;
+    const out=['// realtek begin','// Generated regions are replaced when the Top is regenerated.','// realtek end','','// realtek begin','// realtek end'];
+    const section=key=>out.push('',...L.heading(key,p.orgLayout));
+    const emitConnection=key=>{
+      out.push('// realtek conn '+key+' '+connections.get(key).join(' '));
+      connections.delete(key);
+    };
+    const diagram=p.workbook?.diagrams?.top, diagramGroups=new Map();
+    for(const side of ['left','right']){
+      const groups=new Map(arr(diagram?.groups?.[side]).map(g=>[g.id,g]));
+      for(const signal of arr(diagram?.signals?.[side])){
+        const names=[],seen=new Set();let group=groups.get(signal.groupId);
+        while(group&&!seen.has(group.id)){names.unshift(group.name);seen.add(group.id);group=groups.get(group.parentId);}
+        if(names.length)diagramGroups.set(signal.id,names.join(' / '));
       }
-      if(!inGenerated&&/^\/\/ realtek conn\s/.test(line)){
-        if(!inserted){for(const [expr,endpoints]of grouped)out.push('// realtek conn '+expr+' '+endpoints.join(' '));inserted=true;}
-        continue;
-      }
-      const wire=!inGenerated&&/^\/\/ realtek wire ([A-Za-z_][\w$]*)\.\[[^\]]+\]$/.exec(line);
-      if(wire){
-        const bindings=arr(resolved.connections).filter(c=>c.expr===wire[1]);
-        const net=arr(resolved.nets).find(n=>n.name===wire[1]);
-        const inferable=bindings.length&&bindings.every(c=>{
-          const i=arr(resolved.instances).find(i=>i.id===c.instance),m=i&&arr(resolved.modules).find(m=>m.name===i.module),port=m&&arr(m.ports).find(p=>p.name===c.port);
-          return port&&String(port.range||'').replace(/\s/g,'')===String(net.range||'').replace(/\s/g,'')&&!Object.keys(i.parameters||{}).length;
-        });
-        if(inferable){out.push('// realtek wire '+wire[1]);continue;}
-      }
-      out.push(line);
     }
-    return out.join('\n').replace(/\n{3,}/g,'\n\n').trimEnd()+'\n';
+    function declarations(nets,key){
+      let group='';
+      function enter(next){
+        const name=L.clean(next);
+        if(group!==name){out.push(...L.groupLines(group,name));group=name;}
+      }
+      for(const n of nets){
+        for(const label of arr(p.orgLayout?.before?.[n.id]))enter(label);
+        enter((key==='io'&&diagramGroups.get(n.id))||n.group);
+        const attached=bindings.get(n.name)||[];
+        const infer=key==='wire'&&n.range&&attached.length&&attached.every(({pin,overridden})=>
+          pin&&!overridden&&String(pin.range||'').replace(/\s/g,'')===String(n.range).replace(/\s/g,''));
+        out.push(C.orgDirectiveNet(infer?{...n,range:''}:n));
+        if(n.comment){
+          const prefix=n.orgCommentDirective?'// realtek comment '+n.name+'.//':'// Note '+n.name+' | ';
+          out.push(prefix+L.clean(n.comment));
+        }
+        for(const expr of byWire.get(n.name)||[])emitConnection(expr);
+      }
+      for(const label of arr(p.orgLayout?.tail?.[key]))enter(label);
+    }
+    section('format');
+    if(p.prelude?.trim())out.push(p.prelude.trim(),'');
+    for(const name of selectedFormats)out.push('// realtek format '+name);
+    section('inst');
+    for(const inst of new Set(mapping.map(x=>x.inst)))out.push('// realtek inst '+inst);
+    for(const i of p.instances)for(const [name,value] of Object.entries(i.parameters||{}))
+      out.push('// realtek param '+instMap.get(i.id).endpoint+'.'+name+'.'+value);
+    section('io');declarations(ports,'io');
+    for(const item of arr(p.importPreservedFragments)){
+      if(item.kind==='empty-fpga-placeholder'&&typeof item.source==='string'&&
+        /^\s*`ifdef[ \t]+FPGA[ \t]*(?:\/\/[^\r\n]*)?\r?\n(?:[ \t]*(?:\/\/[^\r\n]*)?\r?\n)*[ \t]*`endif[ \t]*(?:\/\/[^\r\n]*)?\s*$/.test(item.source)&&
+        !/^\s*\/\/\s*realtek\b/m.test(item.source))out.push(item.source.trim());
+    }
+    section('wire');declarations(wires,'wire');
+    for(const key of connections.keys())emitConnection(key);
+    section('special');
+    for(const a of p.assigns)out.push('// realtek assign '+a.target+' = '+a.expr+';');
+    if(p.advanced?.trim())out.push(p.advanced.trim());
+    // The generated snapshot uses the same port order, independently of the order
+    // in which wires and ports were added to the workbook.
+    const snapshot={...p,nets:[...ports,...wires].map(n=>({...n,comment:''}))};
+    return out.concat('',C.orgGeneratedBlocks(snapshot,true)).join('\n').trimEnd()+'\n';
   }
   function verilog(project,options){
     const clean=clone(project);clean.nets=arr(clean.nets).map(n=>({...n,comment:''}));
@@ -127,18 +176,24 @@
     return '#!/bin/csh -f\n# WrapItfUp '+releaseLabel()+': run from the extracted package directory.\n# Edit delivery-config.json for Top/tools/arguments/source links/environment.\n# Python 3 runs this helper; config.python is independently used for company gen_empty.\n# Each run creates runs/run-*/output; downloaded RTL is never overwritten.\nif ( ! -f delivery-config.json || ! -f run_wiu.py ) then\n  echo "Run from the extracted package directory containing delivery-config.json and run_wiu.py."\n  exit 1\nendif\nwhich python3 >& /dev/null\nif ( $status != 0 ) then\n  echo "Missing Python 3 for run_wiu.py. Load your company Python 3 environment and retry."\n  exit 1\nendif\npython3 run_wiu.py generate\nexit $status\n';
   }
 
-  function emptyValidation(project,config){
+  function emptyValidation(project,config,profiles){
     const cfg={...B.normalize(config||project.bundleConfig),dualMode:true},current=B.validate(project,cfg),groups=new Map();
-    try{for(const entry of B.profileProjects(project,cfg))for(const issue of B.validate(entry.project,cfg).errors){
-      const key=issue.code+'|'+issue.port+'|'+issue.message;let row=groups.get(key);if(!row){row={...issue,modes:[]};groups.set(key,row);}row.modes.push(entry.name);
-    }}catch(e){groups.set('mode',{severity:'error',code:'PROFILE_MODE',message:e.message,port:'',modes:[]});}
-    return {...current,errors:[...groups.values()].map(i=>({...i,message:i.message+(i.modes.length?'（'+i.modes.join(' / ').toUpperCase()+'）':'')}))};
+    function record(issue,mode){
+      const key=issue.code+'|'+issue.port+'|'+issue.message;
+      if(!groups.has(key))groups.set(key,{...issue,modes:[]});
+      if(mode)groups.get(key).modes.push(mode);
+    }
+    for(const issue of current.errors)record(issue);
+    try{for(const entry of profiles||B.profileProjects(project,cfg))for(const issue of B.validate(entry.project,cfg).errors)record(issue,entry.name);}
+    catch(e){record({severity:'error',code:'PROFILE_MODE',message:e.message,port:''});}
+    return {...current,currentErrors:current.errors,errors:[...groups.values()].map(i=>({...i,message:i.message+(i.modes.length?'（'+i.modes.join(' / ').toUpperCase()+'）':'')}))};
   }
   function prepare(project,config){
     const cfg={...B.normalize(config||project.bundleConfig),dualMode:true,includeReferences:false};
     if(cfg.profiles.some(p=>!['asic','fpga'].includes(p.name)))fail('COMPANY_PROFILES','公司範例只產生 ASIC／FPGA。請移除其他命名快照，或提供該組態的原始執行範例。');
-    const empty=emptyValidation(project,cfg);if(empty.errors.length){const error=Error(empty.errors.map(i=>i.message).join('\n'));error.issues=empty.errors;throw error;}
-    const entries=B.profileProjects(project,cfg),modes={};
+    const entries=B.profileProjects(project,cfg);
+    const empty=emptyValidation(project,cfg,entries);if(empty.errors.length){const error=Error(empty.errors.map(i=>i.message).join('\n'));error.issues=empty.errors;throw error;}
+    const modes={};
     for(const entry of entries){
       const p=entry.project,errors=B.exportIssues(p);
       if(errors.length){const error=Error(errors.map(i=>i.message).join('\n'));error.issues=errors;throw error;}
@@ -148,7 +203,7 @@
         const module=p.modules.find(m=>m.name===instance.module),name=module.sourceFilename||module.filename||module.name+'.v';
         if(p.modules.filter(m=>(m.sourceFilename||m.filename||m.name+'.v')===name).length>1)fail('COMPANY_MULTI_MODULE','公司範例使用一個檔案一個 module；'+name+' 含多個 module。請先拆檔，直接 RTL 匯出仍可使用。');
       }
-      modes[entry.name]={project:p,org:org(B.orgSnapshot(p)),stub:stub(p,cfg),sources:sourceMap(p)};
+      modes[entry.name]={project:p,org:org(p),stub:stub(p,cfg),sources:sourceMap(p)};
     }
     const a=modes.asic,f=modes.fpga;
     if(a.org!==f.org)fail('COMPANY_MODE_ORG','ASIC／FPGA 的介面或接線不同，目前無法用範例中的同一份 org 表達。請提供這種條件接線的可執行 org；不會自動改用不同的生成流程。');
@@ -156,7 +211,7 @@
     const rows=p=>D.normalize(p.defineConfig).rows.filter(r=>r.enabled&&r.name!=='FPGA').map(r=>[r.name,r.value]).sort((a,b)=>a[0].localeCompare(b[0]));
     if(JSON.stringify(rows(a.project))!==JSON.stringify(rows(f.project)))fail('COMPANY_MODE_DEFINES','原始流程讓 FPGA 繼承 ASIC defines。目前兩組有額外的新增、移除或改值；請先使用共用 defines 加 FPGA 旗標，或提供對應範例。');
     if(JSON.stringify([...a.sources])!==JSON.stringify([...f.sources])||JSON.stringify(D.normalize(a.project.defineConfig).includes)!==JSON.stringify(D.normalize(f.project.defineConfig).includes))fail('COMPANY_MODE_SOURCES','兩種模式需要不同來源檔；原始範例使用同一組 RTL。請提供對應的來源切換腳本。');
-    return {config:cfg,modes};
+    return {config:cfg,modes,empty};
   }
   function openPins(project){
     const mapping=new Map(C.instanceMapping(project).map(i=>[i.id,i.endpoint]));
@@ -167,7 +222,10 @@
   function pending(project){return ['外部 gen_top／gen_empty 與目標模擬環境需由使用者自行驗證。'];}
   const releaseLabel=()=>((typeof globalThis!=='undefined'&&globalThis.WIURelease)||(typeof require==='function'?require('./release'):null))?.label||'Public';
   function files(project,config){
-    const prepared=prepare(project,config),a=prepared.modes.asic,f=prepared.modes.fpga,top=project.top,root='',list=[],paths=new Map(),aliases=[];
+    return packageFiles(project,prepare(project,config));
+  }
+  function packageFiles(project,prepared){
+    const a=prepared.modes.asic,f=prepared.modes.fpga,top=project.top,root='',list=[],paths=new Map(),aliases=[];
     const add=(path,text,description,kind='generated')=>{
       B.safePath(path);const key=path.toLowerCase();
       if(/\.(?:py|sh)$/i.test(path)&&kind!=='script')fail('COMPANY_SCRIPT_ASSET','目前設計下載僅包含設計檔案；請從 RTL／include 來源移除腳本：'+path);
@@ -224,7 +282,7 @@
     add(top+'.empty.v',combine(true),'Website-generated replacement for the entire current module; compile instead of the normal RTL');
     add(scriptPlan(project).filename,script(project),'Configured C-shell entry: Top, define paths, tools and source links','script');
     const plan=scriptPlan(project);
-    add('run_wiu.py',assets.runner,'Python 3 delivery helper; company tools remain external','script');
+    add('run_wiu.py',assets.runner.replace('__WRAPITFUP_RELEASE__',releaseLabel()),'Python 3 delivery helper; company tools remain external','script');
     const dirs=[...new Set(['.'].concat([...sources.keys(),...includes.map(i=>i.name)].map(name=>name.includes('/')?name.slice(0,name.lastIndexOf('/')):'.')))];
     const incs=dirs.map(dir=>'+incdir+'+dir);
     const aliasesOnly=new Set(aliases.map(([original])=>original));
@@ -253,5 +311,13 @@
     return list;
   }
   function review(project,config){const prepared=prepare(project,config);return B.reviewText(project.top,Object.entries(prepared.modes).map(([name,mode])=>B.wiringReview(mode.project,prepared.config,name))).replaceAll('modes/MODE/','');}
-  return {files,prepare,emptyValidation,pending,org,verilog,header,stub,review,script,scriptConfig,scriptPlan,companyCompatibility};
+  function inspectPackage(project,config){
+    try{
+      const prepared=prepare(project,config);
+      return {validation:prepared.empty,entries:packageFiles(project,prepared)};
+    }catch(e){
+      return {validation:{errors:e.issues?.length?e.issues:[{message:e.message}],warnings:[],outputs:[]},entries:[]};
+    }
+  }
+  return {files,inspectPackage,prepare,emptyValidation,pending,org,verilog,header,stub,review,script,scriptConfig,scriptPlan,companyCompatibility};
 });

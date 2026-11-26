@@ -97,7 +97,7 @@ function sceneKey(p){
  const modules=usedModules(p).map(({id,name,ports,parameters})=>({id,name,ports,parameters}));
  const ids=new Set(['top',...modules.map(m=>m.id)]),wb=p.workbook||{};
  const diagrams=Object.fromEntries(Object.entries(wb.diagrams||{}).filter(([id])=>ids.has(id)));
- return JSON.stringify({top:p.top,parameters:p.parameters,modules,instances:p.instances,nets:p.nets,connections:p.connections,assigns:p.assigns,defineConfig:p.defineConfig,workbook:{diagrams,...Object.fromEntries(['graphPositions','topPortY','wireRoutes','topStyle','graphAutoR99','instanceLayouts','routingSpace','routingCorridorPass','topPortSideCopies'].map(k=>[k,wb[k]]))}});
+ return JSON.stringify({top:p.top,parameters:p.parameters,modules,instances:p.instances,nets:p.nets,connections:p.connections,assigns:p.assigns,defineConfig:p.defineConfig,workbook:{diagrams,...Object.fromEntries(['graphPositions','topPortY','wireRoutes','topStyle','graphAutoR99','instanceLayouts','routingSpace','routingCorridorPass','topPortSideCopies','wireLabels'].map(k=>[k,wb[k]]))}});
 }
 function peek(p){return sceneCache.get(sceneKey(p));}
 function prime(p,scene){sceneCache.set(sceneKey(p),scene);while(sceneCache.size>4)sceneCache.delete(sceneCache.keys().next().value);return scene;}
@@ -323,7 +323,7 @@ function create(project,{fast=false,full=false}={}){
  const topParameterLines=topParameterText?wrap(topParameterText,860,11):[];
  const headerBottom=66+topParameterLines.length*18;
  for(const side of ['left','right']){let previous=headerBottom-4,lastGroup='';topRows[side]=[];top[side].forEach((p,index)=>{if(!p)return;const sig=topDiagram.signals[side].find(s=>s.id===p.id),g=topDiagram.groups[side].find(g=>g.id===sig?.groupId),key=g?S.groupKey('top',side,g.id):'',changed=key!==lastGroup,y=Math.max(Math.max(project.workbook.topPortY?.[p.id]||112+index*48,headerBottom+42),previous+44+(changed?34:0));topRows[side].push({p,index,y,g,key});if(g){if(changed)topGroups.push({key,name:W.groupLabel(topDiagram,side,g.id),side,top:y-40,bottom:y+22,color:S.color(project,key,topDiagram.groups[side].indexOf(g),g.name,g.color),moduleId:'top',members:[]});const gg=topGroups.at(-1);gg.bottom=y+22;gg.members.push(p.name);}previous=y;lastGroup=key;});}
- const outer= Math.max(290,...project.nets.filter(n=>n.direction!=='wire').map(n=>measure(n.name+(n.range||''),'12px')+42)),leftX=outer;
+ const outer= Math.max(290,...project.nets.filter(n=>n.direction!=='wire').map(n=>measure(n.name,'12px')+42)),leftX=outer;
  const trackSpace=frozen?.autoSize?.trackSpace;
  if(trackSpace){
   const Y=v=>Track.mapped(trackSpace.y,v);
@@ -348,9 +348,19 @@ function create(project,{fast=false,full=false}={}){
  const text=(value,x,y,align='start',options={})=>{const t=D.text(value,x,y,align,{size:12,color:ink,...options},measure);items.push(t);return t;};
  const line=(x1,y1,x2,y2,o={})=>items.push({type:'line',x1,y1,x2,y2,color:ink,weight:1,...o});
  const rect=(x,y,width,height,o={})=>items.push({type:'rect',x,y,width,height,color:ink,weight:1,...o});
- const glyph=(x,y,direction,side,color,key)=>{const toward=side==='left'?1:-1,dir=direction==='output'?-toward:toward;
-  const pts=direction==='inout'?[[x-7,y],[x-3,y-5],[x+3,y-5],[x+7,y],[x+3,y+5],[x-3,y+5]]:[[x-dir*7,y-5],[x+dir*1,y-5],[x+dir*7,y],[x+dir*1,y+5],[x-dir*7,y+5]];
-  items.push({type:'polygon',points:pts,color,fill:'#ffffff',weight:1.4,role:'directional-port',key});};
+ const glyph=(x,y,direction,side,color,key)=>{
+  const [dx,dy]=IL.vector(side),sign=direction==='output'?1:-1;
+  const shape=direction==='inout'?[[-7,0],[-3,-5],[3,-5],[7,0],[3,5],[-3,5]]:[[-7,-5],[1,-5],[7,0],[1,5],[-7,5]];
+  const pts=shape.map(([along,across])=>[x+along*dx*sign-across*dy,y+along*dy*sign+across*dx]);
+  items.push({type:'polygon',points:pts,color,fill:'#ffffff',weight:1.4,role:'directional-port',key});
+ };
+ const pinWidth=(port,key,x,y,side,color)=>{
+  const label=D.pinWidthLabel(port.range,endByKey.get(key)?.width);if(!label)return;
+  const [dx,dy]=IL.vector(side),cx=x+dx*25,cy=y+dy*25;
+  line(x+dx*7,y+dy*7,x+dx*40,y+dy*40,{color,weight:1.7,role:'pin-width-lead',key});
+  line(cx-4,cy+5,cx+4,cy-5,{color,weight:1.2,role:'bus-slash',key});
+  text(label,cx,dy?cy+dy*15:cy-13,'middle',{size:10,color,role:'port-width',key});
+ };
  rect(leftX,18,rightX-leftX,height-36,{fill:'#ffffff',weight:1.7,role:'top-boundary'});
  rect(leftX,18,rightX-leftX,headerBottom-18,{fill:style.monochrome?'#eeeeee':'#f0ecf4',role:'top-cap'});
  text(project.top,leftX+20,43,'start',{size:20,bold:true,role:'top-name'});
@@ -381,9 +391,11 @@ function create(project,{fast=false,full=false}={}){
     const p=row.port,key=i.id+'::'+p.name,e=endByKey.get(key),px=x+row.x,py=y+row.y,ly=y+row.labelY;
     points.set(key,{x:px,y:py+(side==='top'?-7:7),side,key,instance:i.id,row,padX:px,padY:py});
     paintFor(i.id,()=>{
-     rect(px-5,py-5,10,10,{fill:'#ffffff',role:'directional-port',key});
-     if(!row.compact){line(px,py+(side==='top'?7:-7),px,ly,{color:'#b7c5c3',weight:.6,dash:true,role:'pin-label-leader'});
-      text(({input:'IN ',output:'OUT ',inout:'I/O '})[p.direction]+p.name+(e?.width===1?'':p.range||''),px-9,ly,'end',{size:12,role:'port-name',key});
+     glyph(px,py,p.direction,side,muted,key);
+     pinWidth(p,key,px,py,side,muted);
+     if(p.waveType==='clock')items.push(...D.clockMarker(px,py+(side==='top'?17:-17),{monochrome:style.monochrome,key}));
+     if(!row.compact){line(px,py+(side==='top'?1:-1)*(p.waveType==='clock'?28:7),px,ly,{color:'#b7c5c3',weight:.6,dash:true,role:'pin-label-leader'});
+      text(p.name,px-9,ly,'end',{size:12,role:'port-name',key});
      }
      if(e?.expr==null)text('○',px,py+(side==='top'?-18:18),'middle',{size:10,role:'unconfigured',key});else if(e.expr==='')text('×',px,py+(side==='top'?-18:18),'middle',{size:10,role:'open',key});
     });
@@ -399,17 +411,17 @@ function create(project,{fast=false,full=false}={}){
   for(const g of b.groups){const gx=x+(g.side==='left'?10:bw/2+4),gw=bw/2-14,gy=y+g.y,gh=g.bottom-g.y+4,cc=g.color;groups.push({...g,instance:i.id,x:gx,y:gy,width:gw,height:gh});
    paintFor(i.id,()=>drawGroup(g,gx,gy,gw,gh,cc));
   }
-  for(const side of ['left','right'])for(const row of b.columns[side]){if(!row)continue;const p=row.port,key=i.id+'::'+p.name,px=side==='left'?x:x+bw,py=y+row.y,align=side==='left'?'start':'end',lx=px+(side==='left'?17:-17),g=b.groups.find(g=>g.side===side&&g.id===row.group),cc=g?.color||muted,e=endByKey.get(key);
+  for(const side of ['left','right'])for(const row of b.columns[side]){if(!row)continue;const p=row.port,key=i.id+'::'+p.name,px=side==='left'?x:x+bw,py=y+row.y,align=side==='left'?'start':'end',lx=px+(side==='left'?1:-1)*(p.waveType==='clock'?34:17),g=b.groups.find(g=>g.side===side&&g.id===row.group),cc=g?.color||muted,e=endByKey.get(key);
    points.set(key,{x:px+(side==='left'?-7:7),y:py,side,key,instance:i.id,row,group:g?.key,padX:px});
-   paintFor(i.id,()=>{glyph(px,py,p.direction,side,cc,key);text(p.name+(e?.width===1?'':p.range||''),lx,py,align,{size:12,role:'port-name',key});row.comment.forEach((c,k)=>text(c,lx,py+17+k*15,align,{size:10,color:muted,role:'port-comment',key}));if(e?.expr==null)text('○',px+(side==='left'?-13:13),py,'middle',{size:9,color:style.monochrome?'#555555':'#8c6f4e',role:'unconfigured',key});else if(e.expr==='')text('×',px+(side==='left'?-13:13),py,'middle',{size:10,role:'open',key});});
+   paintFor(i.id,()=>{glyph(px,py,p.direction,side,cc,key);pinWidth(p,key,px,py,side,cc);if(p.waveType==='clock')items.push(...D.clockMarker(px+(side==='left'?17:-17),py,{monochrome:style.monochrome,key}));text(p.name,lx,py,align,{size:12,role:'port-name',key});row.comment.forEach((c,k)=>text(c,lx,py+17+k*15,align,{size:10,color:muted,role:'port-comment',key}));if(e?.expr==null)text('○',px+(side==='left'?-13:13),py,'middle',{size:9,color:style.monochrome?'#555555':'#8c6f4e',role:'unconfigured',key});else if(e.expr==='')text('×',px+(side==='left'?-13:13),py,'middle',{size:10,role:'open',key});});
    if(e?.expr==null)note(i.name+'.'+p.name,'未設定','unconfigured');else if(e.expr==='')note(i.name+'.'+p.name,'刻意留空（NC）','open');if(e?.expr&&!identifier(e.expr))note(i.name+'.'+p.name,e.expr,'expression');
   }
  }
  for(const g of topGroups){groups.push(g);paint.push(()=>drawGroup(g,g.side==='left'?12:rightX+12,g.top,outer-24,g.bottom-g.top,g.color));}
  for(const side of ['left','right'])topRows[side].forEach(({p,index,y,g,key:gkey})=>{const key='top::'+p.id,x=side==='left'?leftX:rightX,cc=g?S.color(project,gkey,topDiagram.groups[side].indexOf(g),g.name,g.color):muted;
-  points.set(key,{x:x+(side==='left'?7:-7),y,side:side==='left'?'right':'left',outerSide:side,key,index,padX:x,...(topLanes?{trackX:x+(side==='left'?1:-1)*(48+index*topLanes.pitch)}:{})});
+  points.set(key,{x:x+(side==='left'?7:-7),y,side:side==='left'?'right':'left',outerSide:side,key,index,padX:x,splitNetId:frozen?.autoSize?.splitSourceIds?.[key],...(topLanes?{trackX:x+(side==='left'?1:-1)*((topLanes.start||48)+index*topLanes.pitch)}:{})});
 
-  paint.push(()=>{glyph(x,y,p.direction,side,cc,key);text(p.name+(endByKey.get(key)?.width===1?'':p.range||''),x+(side==='left'?-18:18),y,side==='left'?'end':'start',{size:12,bold:true,role:'top-port-name',key});if(p.comment)text(p.comment,x+(side==='left'?-18:18),y+17,side==='left'?'end':'start',{size:10,color:muted,role:'port-comment',key});});
+  paint.push(()=>{glyph(x,y,p.direction,side,cc,key);pinWidth(p,key,x,y,side==='left'?'right':'left',cc);if(p.waveType==='clock')items.push(...D.clockMarker(x+(side==='left'?17:-17),y,{monochrome:style.monochrome,key}));text(p.name,x+(side==='left'?-18:18),y,side==='left'?'end':'start',{size:12,bold:true,role:'top-port-name',key});if(p.comment)text(p.comment,x+(side==='left'?-18:18),y+17,side==='left'?'end':'start',{size:10,color:muted,role:'port-comment',key});});
  });
  const drawn=new Set(),named=new Set(),labelOverflow=[];
  const overlaps=(a,b,pad=7)=>a.x<b.x+b.width+pad&&a.x+a.width>b.x-pad&&a.y<b.y+b.height+pad&&a.y+a.height>b.y-pad;
@@ -444,13 +456,13 @@ function create(project,{fast=false,full=false}={}){
   if(!path){path=[a,{x:(a.x+b.x)/2,y:a.y},{x:(a.x+b.x)/2,y:b.y},b];note(net,'通道不足；請移動 block','routing');}
   const cc=style.monochrome?'#444444':groups.find(g=>g.key===a.group||g.key===b.group)?.color||'#68778c';
   // Pad glyph already encodes port direction: never add electrical arrows.
-  items.push({type:'path',points:path.map(p=>[p.x,p.y]),color:cc,weight:1.3,endArrow:false,startArrow:false,role:'connection',net,selection,source,target,routeKey,groupObject:'net:'+net});
+  items.push({type:'path',points:path.map(p=>[p.x,p.y]),color:cc,weight:endByKey.get(source)?.width>1||endByKey.get(target)?.width>1?1.7:1.2,endArrow:false,startArrow:false,role:'connection',net,selection,source,target,routeKey,groupObject:'net:'+net});
   const segments=path.slice(1).map((p,j)=>[path[j].x,path[j].y,p.x,p.y]);
   const mid=path[Math.floor(path.length/2)],handle=manual&&manualSetting?{x:manualSetting.x,y:manualSetting.y}:{x:mid.x,y:mid.y};
   edges.push({source,target,net,selection,routeKey,bidirectional,points:segments,routed,manual,handle,color:cc});
   if(!fast&&edges.length%8===0)root.WIURouteProgress?.({phase:'計算避障路徑',done:edges.length});
   if(!fast&&!denseRouting&&style.showWireNames&&!named.has(net)){
-   const n=project.nets.find(n=>n.name===net),value=net+(n?.range||''),primary=!named.has(net);
+   const value=net,primary=!named.has(net);
    named.add(net);
    const segmentsByLength=segments.slice().sort((a,b)=>Math.hypot(b[2]-b[0],b[3]-b[1])-Math.hypot(a[2]-a[0],a[3]-a[1]));
    const available=segmentsByLength.filter(v=>Math.hypot(v[2]-v[0],v[3]-v[1])>35);
@@ -477,20 +489,26 @@ function create(project,{fast=false,full=false}={}){
    else labelOverflow.push({value,cc,net,primary,source,target,number:edges.length});
   }
  };
+ const drivers=new Map(),aliases=new Map(),externalInputs=new Map(project.nets.filter(n=>n.direction==='input').map(n=>[n.name,'top::'+n.id]));
+ const append=(map,key,value)=>{if(!map.has(key))map.set(key,[]);map.get(key).push(value);};
+ for(const row of rows)if(row.port.direction==='output'&&row.expr)append(drivers,row.expr,row.key);
+ for(const assign of project.assigns||[])if(identifier(assign.expr))append(aliases,assign.target,assign.expr);
  const sourcesFor=(name,seen=new Set())=>{
-  if(!identifier(name)||seen.has(name))return [];const visited=new Set(seen);visited.add(name);
-  const direct=rows.filter(r=>r.port.direction==='output'&&r.expr===name).map(r=>r.key),external=project.nets.find(n=>n.name===name&&n.direction==='input');if(external)direct.push('top::'+external.id);
-  for(const a of project.assigns||[])if(a.target===name&&identifier(a.expr))direct.push(...sourcesFor(a.expr,visited));
+  if(!identifier(name)||seen.has(name))return [];
+  const visited=new Set(seen);visited.add(name);
+  const direct=[...(drivers.get(name)||[])];
+  if(externalInputs.has(name))direct.push(externalInputs.get(name));
+  for(const alias of aliases.get(name)||[])direct.push(...sourcesFor(alias,visited));
   const unique=[...new Set(direct)];
   if(unique.length>1){note(name,'同一訊號有多個可能來源，請先修正 driver','electrical');return [];}
   return unique;
  };
- const topContext=C.resolveParameters({parameters:C.projectView(project).parameters||[]},{}).context;
+ const effectiveProject=C.projectView(project),topContext=C.resolveParameters({parameters:effectiveProject.parameters||[]},{}).context;
  for(const r of rows){
   if(r.port.direction!=='input'||!r.expr)continue;
   let ref,expanded;try{expanded=C.expandDefines(r.expr,project);ref=C.parseExpression(expanded);}catch{continue;}
   if(!['ref','select'].includes(ref.kind))continue;
-  if(ref.kind==='select')try{C.expressionInfo(ref,C.projectView(project).nets,topContext);}catch{continue;}
+  if(ref.kind==='select')try{C.expressionInfo(ref,effectiveProject.nets,topContext);}catch{continue;}
   const selection=ref.kind==='select'?expanded.trim().slice(expanded.indexOf('[')).replace(/\s+/g,''):'';
   const sources=sourcesFor(ref.name);for(const source of sources)connect(source,r.key,ref.name,false,selection);
   if(!sources.length)note(r.instanceName+'.'+r.port.name,r.expr+'（未找到可直繪的驅動端）','unresolved');
@@ -606,7 +624,7 @@ function create(project,{fast=false,full=false}={}){
   for(const net of nets){
    const same=edges.filter(e=>e.net===net),n=project.nets.find(n=>n.name===net);let range=n?.range||'';
    try{if(C.parseRange(C.expandDefines(range,project),topContext).width===1)range='';}catch{}
-   if(style.showWireNames)requests.push({net,edges:same,value:net+range,primary:true,selection:''});
+   if(style.showWireNames)requests.push({net,edges:same,value:net,primary:true,selection:''});
    for(const selection of new Set(same.map(e=>e.selection).filter(Boolean))){
     if(selection===range)continue;
     requests.push({net,edges:same.filter(e=>e.selection===selection),value:selection,primary:false,selection});
@@ -648,7 +666,7 @@ function create(project,{fast=false,full=false}={}){
   const namedFast=new Set();
   for(const e of edges){if(!style.showWireNames&&!e.selection||namedFast.has(e.net))continue;namedFast.add(e.net);
    const v=e.points.slice().sort((a,b)=>Math.hypot(b[2]-b[0],b[3]-b[1])-Math.hypot(a[2]-a[0],a[3]-a[1]))[0];if(!v)continue;
-   const n=project.nets.find(n=>n.name===e.net),t=D.text(e.net+(n?.range||''),(v[0]+v[2])/2,(v[1]+v[3])/2-12,'middle',{size:11,color:e.color,role:'net-label',net:e.net,groupObject:'net:'+e.net},measure);t.primary=true;labels.push(t);
+   const t=D.text(e.net,(v[0]+v[2])/2,(v[1]+v[3])/2-12,'middle',{size:11,color:e.color,role:'net-label',net:e.net,groupObject:'net:'+e.net},measure);t.primary=true;labels.push(t);
   }
  }
  // Junctions and bridges share one topology-aware geometry pass; no masks.
@@ -674,6 +692,21 @@ function create(project,{fast=false,full=false}={}){
 
  // Diagnostics belong in the editor, never inside the exported electrical drawing.
  for(const n of notes.filter(n=>!['routing','electrical'].includes(n.kind))){text(n.label+' = '+n.value,leftX,appendixY,'start',{size:11,role:'annotation'});appendixY+=20;}
+ const branchLabels=project.workbook?.wireLabels||[];
+ if(branchLabels.length){
+  const occupied=[...labels],byRoute=new Map(edges.map(e=>[e.routeKey,e])),anchors=dep('WIUWireLabels','wire-labels');
+  for(const annotation of branchLabels){
+   const edge=byRoute.get(annotation.routeKey);if(!edge)continue;
+   const at=anchors.position(edge,annotation.at);if(!at)continue;
+   const options={size:13,bold:true,color:ink,role:'segment-label',net:edge.net,labelId:annotation.id,groupObject:'net:'+edge.net};
+   const choices=[-16,16,-44,44,-72,72].map(dy=>D.text(annotation.text,at.x,at.y+dy,'middle',options,measure));
+   const label=choices.find(t=>![...occupied,...obstacles].some(box=>overlaps(t,box,5)))||choices[0];
+   occupied.push(label);items.push(label);
+   const background={type:'rect',role:'segment-label-background',net:edge.net,labelId:annotation.id,
+     x:label.x-5,y:label.y-2,width:label.width+10,height:label.height+4,fill:'#ffffff',color:'#b6c9c9',weight:.6};
+   items.splice(items.length-1,0,background);
+  }
+ }
  const bb=D.bounds(items),sceneWidth=Math.max(width,bb.x+bb.width+10),sceneHeight=Math.max(height,appendixY+20);
  const completed={previewOnly:fast,boundedRouting:bounded,autoSize:autoSize.expansion,routeQualityR98:routingResult,crossingSummary:{...geometry.summary,trackMoves},crossingIssues:geometry.issues,width:sceneWidth,height:sceneHeight,canvasBounds:{width:sceneWidth,height:sceneHeight},bounds:{x:0,y:0,width:sceneWidth,height:sceneHeight},items,edges,notes,bridgePlan:geometry.marks.filter(m=>m.kind==='bridge'),points:Object.fromEntries(points),groups,placed,labels,labelOverflow,topBoundary:{left:leftX,right:rightX,headerBottom,bottom:height-18,lanes:topLanes},style,routingMode:pending?'deferred':frozen?'manual':'auto',pendingRouting:!!pending,autoLocalRepairs,routeSearchFallbacks:edges.filter(e=>!e.routed&&!e.manual).length};
  // Geometry quality closure: when an initial automatic solution is still
@@ -700,7 +733,26 @@ function create(project,{fast=false,full=false}={}){
  while(sceneCache.size>3)sceneCache.delete(sceneCache.keys().next().value);
  return completed;
 }
-function svg(project,{viewport=null}={}){const full=project?.items?project:create(project),scene=viewport?{...full,items:full.items.filter(x=>Viewport.visibleItem(x,viewport))}:full,b=viewport||scene.bounds;
+// Preview thumbnails and overview zoom resolve geometry only to the visible scale.
+function layoutThumbnail(scene){
+ const routes=new Map(scene.edges.map(e=>[e.routeKey,e]));
+ const roles=new Set(['top-boundary','instance','instance-header','module-name','top-name']);
+ const items=scene.items.flatMap(s=>{
+  if(roles.has(s.role))return [s];
+  if(s.role!=='connection')return [];
+  return [{...s,role:'preview-wire',points:ptsOf(routes.get(s.routeKey))}];
+ });
+ return {...scene,items,bridgePlan:[],crossingIssues:[],routeQualityR98:{summary:scene.routeQualityR98?.summary}};
+}
+function svg(project,{viewport=null}={}){
+ const full=project?.items?project:create(project);
+ const overview=viewport?.overview?new Map(full.edges.map(e=>[e.routeKey,e])):null;
+ const items=viewport?full.items.flatMap(item=>{
+  const edge=overview&&item.role==='connection'&&overview.get(item.routeKey);
+  const shape=edge?{...item,points:ptsOf(edge)}:item;
+  return Viewport.visibleItem(shape,viewport)?[shape]:[];
+ }):full.items;
+ const scene={...full,items},b=viewport||scene.bounds;
  return D.svg(scene).replace('id="diagramSvg"','id="topSceneSvg"'+(viewport?' style="left:'+b.x+'px;top:'+b.y+'px;overflow:hidden"':''))
  .replace(/width="[^"]+" height="[^"]+" viewBox="[^"]+"/,'width="'+b.width+'" height="'+b.height+'" viewBox="'+[b.x,b.y,b.width,b.height].join(' ')+'"');}
 function metadata(project,workspace){const env=W.envelope(project,workspace||{view:'assembly',tab:'graph'},'user'),json=JSON.stringify(env),encoded=typeof Buffer!=='undefined'?Buffer.from(json,'utf8').toString('base64'):btoa(unescape(encodeURIComponent(json))),chunks=encoded.match(/.{1,180}/g)||[];return ["' WRAPPINUP_STATE_BEGIN",...chunks.map(s=>"' WRAPPINUP_STATE_CHUNK:"+s),"' WRAPPINUP_STATE_END"].join('\r\n');}
@@ -755,5 +807,5 @@ function exportDrawing(project,options={}){
  return {vbs:text,actualMode,diagnostics:check,fallbackError,preparedSnapshot};
 }
 function vbs(project,options={}){return exportDrawing(project,options).vbs;}
-const api={create,sceneKey,peek,prime,snapshotScene,withDrawingSnapshot,spreadAutomatic,expandSpace,svg,vbs,exportDrawing,prepare,wireMarks,capture,topologySignature,routeIdentity,layoutIdentity,deferConnections,validFreeze,frozenPath,exportDiagnostics};root.WIUTopScene=api;if(typeof module==='object')module.exports=api;
+const api={create,layoutThumbnail,sceneKey,peek,prime,snapshotScene,withDrawingSnapshot,spreadAutomatic,expandSpace,svg,vbs,exportDrawing,prepare,wireMarks,capture,topologySignature,routeIdentity,layoutIdentity,deferConnections,validFreeze,frozenPath,exportDiagnostics};root.WIUTopScene=api;if(typeof module==='object')module.exports=api;
 })(globalThis);

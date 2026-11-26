@@ -1,6 +1,15 @@
 /* Scoped, conditional patches: undo never restores another page's snapshot. */
 (function(root){'use strict';
-const copy=x=>x===undefined?undefined:JSON.parse(JSON.stringify(x)),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+const copy=x=>x===undefined?undefined:JSON.parse(JSON.stringify(x));
+// Normalizers can rebuild the same record with a different insertion order.
+// Only document values matter for conflict checks; array order remains significant.
+function same(a,b){
+ if(a===b)return true;
+ if(!a||!b||typeof a!=='object'||typeof b!=='object')return false;
+ if(Array.isArray(a)||Array.isArray(b))return Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((v,i)=>same(v,b[i]));
+ const keys=x=>Object.keys(x).filter(k=>x[k]!==undefined),ak=keys(a),bk=keys(b);
+ return ak.length===bk.length&&ak.every(k=>Object.prototype.hasOwnProperty.call(b,k)&&same(a[k],b[k]));
+}
 function changes(a,b,path=[],out=[]){
  if(same(a,b))return out;
  const object=x=>x&&typeof x==='object'&&!Array.isArray(x);

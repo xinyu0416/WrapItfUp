@@ -1,7 +1,7 @@
 /* Geometry work is local, cancellable and isolated from the editor thread.
  * Reuse embedded sources in the standalone file; no network or extra payload. */
 (function(root){'use strict';
-const dependencies=['instance-layout.js','diagram-scene.js','release.js','assembly-defines.js','assembly-core.js','assembly-parser.js','assembly-toolchain-assets.js','assembly-bundle.js','assembly-actions.js','diagram-style.js','routing-spacing-r98.js','routing-quality-r98.js','top-autosize-r98.js','native-routing-r92.js','native-polyline-r98.js','native-visio-r92.js','shared-jump-plan-r104.js','visio-live-geometry-r105.js','native-visio-polyline-r98.js','history.js','rtl-interface-edit.js','workbook.js','graph-layout.js','graph-wiring.js','wire-geometry.js','graph-electrical-audit.js','corner-untangle-r100.js','track-space-r106.js','routing-fast-r130.js','graph-viewport-r130.js','graph-scene.js','workflow-r118.js'];
+const dependencies=['instance-layout.js','diagram-scene.js','release.js','assembly-defines.js','org-layout.js','assembly-core.js','assembly-parser.js','assembly-toolchain-assets.js','assembly-bundle.js','assembly-actions.js','diagram-style.js','routing-spacing-r98.js','routing-quality-r98.js','top-autosize-r98.js','native-routing-r92.js','native-polyline-r98.js','native-visio-r92.js','shared-jump-plan-r104.js','visio-live-geometry-r105.js','native-visio-polyline-r98.js','history.js','rtl-interface-edit.js','workbook.js','graph-layout.js','graph-wiring.js','wire-geometry.js','graph-electrical-audit.js','corner-untangle-r100.js','track-space-r106.js','routing-fast-r130.js','graph-viewport-r130.js','wire-labels.js','graph-scene.js','channel-layout.js','workflow-r118.js'];
 function workerMain(){
  self.onmessage=({data})=>{try{
   const {project,kind,options={}}=data,G=self.WIUTopScene;
@@ -9,7 +9,11 @@ function workerMain(){
   self.postMessage({progress:{phase:'計算圖面',done:0}});
   let result;
   if(kind==='export'){self.WIUInteractiveRouting=true;if(project.workbook.graphAutoR99?.pendingRouting){delete project.workbook.graphAutoR99.pendingRouting;project.workbook.graphAutoR99.settlingRouting=true;}G.create(project,{full:true});result=G.exportDrawing(G.withDrawingSnapshot(project),options);}
-  else if(kind==='layout')result=self.WIUWorkflowR118.layoutPlan(project,options.kind,G,self.WIUGraphLayout);
+  else if(kind==='layout'){
+   result=self.WIUWorkflowR118.layoutPlan(project,options.kind,G,self.WIUGraphLayout);
+   result.before=G.layoutThumbnail(result.before);
+   result.after=G.layoutThumbnail(result.after);
+  }
   else{
    self.WIUInteractiveRouting=true;
    if(project.workbook.graphAutoR99?.pendingRouting){delete project.workbook.graphAutoR99.pendingRouting;project.workbook.graphAutoR99.settlingRouting=true;}

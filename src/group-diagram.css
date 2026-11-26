@@ -1,0 +1,11 @@
+.r133-group-panel {margin-top:12px;color:#183b44}
+.r133-controls,.r133-filter-tools {display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.r133-controls {padding:10px 0;border-bottom:1px solid #dce5e6}
+.r133-controls [data-group-count] {flex:1;color:#526572;font-size:13px}
+.r133-filter {flex-basis:auto}.r133-filter[open] {flex-basis:100%}
+.r133-filter summary {cursor:pointer;font-weight:650;padding:6px 0}
+.r133-filter-tools {margin:8px 0}.r133-filter small {color:#576b75}
+.r133-choices {max-height:28vh;overflow:auto;display:grid;align-items:start;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:8px;margin:8px 0}
+.r133-choices fieldset {border:1px solid #dce5e6;border-radius:6px;min-width:0;padding:7px 10px}.r133-choices legend {font:600 13px monospace;overflow-wrap:anywhere}
+.r133-choices label {display:flex;align-items:center;gap:6px;padding:3px 0;overflow-wrap:anywhere;font-size:13px;cursor:pointer}.r133-choices input {width:16px;height:16px;min-height:0}
+.r133-choices [hidden]{display:none!important}.r133-picture {max-height:74vh;overflow:auto;background:white}.r133-picture svg {display:block;width:100%;min-width:620px;height:auto}.r133-empty {text-align:center;padding:3rem 1rem;color:#526572}

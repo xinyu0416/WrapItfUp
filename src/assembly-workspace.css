@@ -1213,12 +1213,11 @@ body.wb-active:not(.a-assembly)>.app{position:fixed;left:0;right:0;top:calc(var(
 @media(max-width:760px){:root{--wb-rail:164px;--r69-top:60px}.a-switch{padding:0 10px!important;gap:7px}.a-switch .ux-brand b{font-size:14px}.a-switch .ux-version{display:none}.r69-top-field input{width:125px}.r69-global-tools{gap:1px}.r69-global-tools button{font-size:11px;padding:5px 7px}.r69-stagebar{gap:3px;padding:0 8px}.r69-stagebar button{padding:7px 9px}.r69-context{display:none}.r69-stages{margin-right:auto}.r69-top-field label{display:none}.r69-menu summary{padding:6px}.wb-practice-badge{display:none}.r69-package-head{align-items:flex-start}.r69-top-invalid{--r69-top:112px!important}.r69-top-field .r68-inline-error{max-width:68vw;width:480px}.r69-package-summary{gap:10px}.r69-delivery-methods{flex-wrap:wrap}.r69-config-summary{align-items:flex-start}.r69-global-tools>[data-action=redo]{display:none}}
 @media(max-height:700px){.fg-panel.a-panel{padding-top:15px!important}.wb-home{padding:30px 6vw}.wb-home h1{font-size:36px}.wb-home p{font-size:14px}.wb-start-guide{margin-top:25px}.app .desk-switchbar{min-height:37px}.fg-rtl-dock.is-open #fg-rtl-content{height:22vh}.a-dialog{max-height:calc(100dvh - 14px)!important}}
 
-/* Diagram labels stay quiet; editors are screen-sized, outside the zoom layer. */
+/* Group labels keep their compact display; port names use the inline editor styles. */
 body:not(.r76-artwork) #canvas #diagramSvg .bittext,body:not(.r76-artwork) #canvas #diagramSvg .grp,body:not(.r76-artwork) #canvas #diagramSvg .sig-comment{opacity:0!important;visibility:hidden}
-.signal-card.inner-name .inline-name-cell,.inline-group-label .group-name-cell,.inline-group-label .group-rich{min-width:0;overflow:hidden!important;text-overflow:ellipsis!important;white-space:pre!important}
-.signal-card .inline-name-cell .name-rich,.inline-group-label .group-rich{opacity:1!important}
-.signal-card [data-act=name],.inline-group-label [data-inline-group-name]{cursor:text;color:transparent!important;caret-color:transparent}
-.signal-card:focus-within .inline-name-cell .name-rich{opacity:1!important}
+.inline-group-label .group-name-cell,.inline-group-label .group-rich{min-width:0;overflow:hidden!important;text-overflow:ellipsis!important;white-space:pre!important}
+.inline-group-label .group-rich{opacity:1!important}
+.inline-group-label [data-inline-group-name]{cursor:text;color:transparent!important;caret-color:transparent}
 .signal-card .card-delete,.signal-card .card-handle,.inline-group-label .label-delete{opacity:0;transition:opacity .1s}
 .signal-card:hover .card-delete,.signal-card:hover .card-handle,.signal-card.selected .card-delete,.signal-card.selected .card-handle,.inline-group-label:hover .label-delete,.inline-group-label.active .label-delete{opacity:1}
 .signal-comment-editor.empty:not(.selected){visibility:hidden;pointer-events:none}

@@ -20,7 +20,8 @@ export async function bundle() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const offline = process.argv.includes('--offline');
   const dir = offline ? 'preview' : 'dist';
-  const name = offline ? 'WrapItfUp-r132-offline.html' : 'index.html';
+  const release = (await import('../src/release.js')).default;
+  const name = offline ? 'WrapItfUp-r'+release.number+'-offline.html' : 'index.html';
   const html = await bundle();
   await mkdir(path.join(root, dir), {recursive:true});
   await writeFile(path.join(root, dir, name), html);

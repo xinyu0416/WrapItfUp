@@ -50,3 +50,7 @@ body{--wb-rail:252px!important}body>.a-switch{box-shadow:none!important;backgrou
 .r124-name-wrap input[aria-invalid=true]{border-color:#b33f32;outline-color:#b33f32}
 #r124-name-help:empty{display:none}#r124-name-help{white-space:normal;font-size:11px;line-height:1.4;margin-top:2px}.r124-name-wrap:has([aria-invalid=true]) #r124-name-help{color:#a42f22}
 .wb-instance-list summary,.r69-design-settings>summary{min-height:24px;cursor:pointer}.wb-rail [data-tab][aria-current=page]{font-weight:650}
+
+/* Waveform type follows the same compact, keyboard-accessible port fields. */
+.r120-signal-table select[data-grid-wave-type]{box-sizing:border-box;width:100%;min-width:74px;height:30px;border:1px solid #cfddd4;border-radius:4px;background:#fff;color:#244d3b;font:12px Calibri,Arial,sans-serif;padding:3px 4px}
+.r120-signal-table select[data-grid-wave-type]:focus{outline:2px solid #23856b;outline-offset:1px}

@@ -26,6 +26,19 @@ function layoutPlan(project,kind,G,L){
  const candidates=[{project:base,scene:before}];
  const keepLocks=scene=>before.placed.filter(b=>locks.has(b.instance.id)).every(b=>{const n=scene.placed.find(x=>x.instance.id===b.instance.id);return n&&n.x===b.x&&n.y===b.y&&n.width===b.width&&n.height===b.height;});
  const add=(p,scene)=>{const c=counts(scene);if(c.every((n,i)=>n<=old[i])&&keepLocks(scene))candidates.push({project:p,scene});};
+ const canSpread=kind!=='fine'&&project.connections.length>=100&&!locks.size&&(kind==='optimize'||!before.edges.some(e=>e.manual));
+ if(canSpread&&(old[0]||old[1]||old[2])){
+  const channels=(root.WIUChannelLayout||(typeof require==='function'&&require('./channel-layout'))).candidate(project,before,G);
+  if(channels){
+   const measured=counts(channels.scene);
+   if(measured.slice(0,3).every((v,i)=>v<=old[i])&&measured.slice(0,3).some((v,i)=>v<old[i])&&
+      !measured[0]&&!measured[1]&&!measured[2]&&measured[3]<=old[3]){
+    return {project:channels.project,before,after:channels.scene,moved:channels.scene.placed.filter(b=>{const a=before.placed.find(x=>x.instance.id===b.instance.id);return a.x!==b.x||a.y!==b.y;}).length,unchanged:false,
+     note:'已為各接腳與不同 net 分配走線空間。請比較圖面大小、線距與交叉點後套用。'};
+   }
+   add(channels.project,channels.scene);
+  }
+ }
  if(kind==='fine'){
   root.WIURoutingDeadline=Date.now()+8000;
   const q=clone(base);q.workbook.graphAutoR99=G.prepare(q,{force:true}).snapshot;const scene=G.create(q,{full:true});add(q,scene);const accepted=candidates.length>1&&score(counts(scene))<score(old),after=accepted?scene:before;
