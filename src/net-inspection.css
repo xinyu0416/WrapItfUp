@@ -1,0 +1,65 @@
+/* Pin paths are viewport UI. Keep them readable independently of diagram zoom. */
+.wb-connect-bar.r82-status:has(.r134-net-name) {
+  padding:6px 12px!important; margin:0!important;
+  border-bottom:1px solid #dce6e3!important; background:#f5f9f7!important;
+  pointer-events:auto!important;
+}
+.wb-connect-bar .r86-net-status:has(.r134-net-name) {
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;
+  overflow:visible!important;line-height:1.35;color:#24433c;
+}
+.r134-net-name {flex:0 1 auto;min-width:0;max-width:min(26%,340px)}
+.r134-net-name>span,.r134-endpoint>span {display:block;color:#46685d;font:600 12px/1.4 system-ui,sans-serif}
+.wb-connect-bar .r134-net-name code,.wb-connect-bar .r134-endpoint code {
+  display:block;white-space:normal;overflow-wrap:anywhere;border:0;background:none;padding:0;
+  font:600 14px/1.4 Consolas,"Microsoft JhengHei",monospace;color:#173f36;
+}
+.r134-paths {display:flex;flex:1 1 450px;flex-wrap:wrap;gap:6px 12px;min-width:0}
+.r134-end {flex:1 1 190px;display:flex;align-items:center;gap:4px;min-width:0}
+.wb-connect-bar .r86-net-status .r134-endpoint {
+  display:block;flex:1 1 auto;min-width:0;min-height:42px!important;text-align:left;
+  padding:3px 8px!important;background:white;border:1px solid #bfcec8;border-radius:5px;
+  white-space:normal;color:#21483d;
+}
+.wb-connect-bar .r134-endpoint:hover:not(:disabled) {border-color:#4b8775;background:#edf7f3}
+.r134-endpoint small {font:500 12px/1.3 system-ui,sans-serif}
+.wb-connect-bar .r134-endpoint:disabled {opacity:.67}
+.r134-cycle {display:flex;gap:2px}.wb-connect-bar .r134-cycle button {min-width:30px;min-height:34px!important;font-size:18px!important}
+.wb-connect-bar .r86-net-status .r118-object-tools:not(:empty){flex-basis:100%}
+.r134-driver-warning,.r134-save-alert {font:600 12px/1.35 system-ui,sans-serif;color:#885024;white-space:normal}
+.r134-route-progress {display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:#765525}
+.r134-save-alert[hidden],#r134-source-actions[hidden],#r134-source-tabs[hidden]{display:none!important}
+#r134-source-tabs,#r134-source-actions {display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px}
+#r134-source-tabs button[aria-pressed=true] {background:#e1f2eb;color:#175742;border-color:#81af9c}
+#r134-source-name {font:13px/1.4 Consolas,monospace;overflow-wrap:anywhere}
+#r134-source-text {display:none}
+#rtlPanel.r134-source-view .rtl-table,#rtlPanel.r134-source-view #rtlCopy,#rtlPanel.r134-source-view #rtlSub,
+#rtlPanel:has(#r134-source-tabs:not([hidden])) #rtlTitle {display:none!important}
+#rtlPanel.r134-source-view #r134-source-text {display:block;margin:0;padding:8px 12px;font:14px/1.45 Consolas,monospace;color:#213b35;white-space:pre;user-select:text}
+#rtlPanel:has(#r134-source-tabs:not([hidden])) .rtl-head {height:auto;min-height:34px;flex-wrap:wrap}
+@media(max-width:800px){
+  .r134-net-name{max-width:100%}.r134-paths{flex-basis:100%}
+}
+
+.wire-inline-editor{position:fixed;z-index:10000;box-sizing:border-box;width:min(292px,calc(100vw - 12px));padding:10px 12px;border:1px solid #7fa5a1;border-radius:8px;background:var(--panel,#fff);color:var(--ink,#193633);box-shadow:0 6px 22px #173b342b}
+.wire-inline-editor label{display:grid;gap:4px}
+.wire-inline-editor strong{font-size:12px}
+.wire-inline-editor input{box-sizing:border-box;width:100%;min-height:32px;padding:4px 7px;font:14px ui-monospace,monospace;color:inherit;background:var(--panel,#fff);border:1px solid #347d75;border-radius:4px}
+.wire-inline-editor input[aria-invalid=true]{border-color:#ad3535}
+.wire-inline-editor small{display:block;margin-top:4px;font-size:11px}
+
+[data-branch-label]{pointer-events:all;cursor:text}
+/* Keep the wire under the pointer when the first click reveals its endpoints. */
+.wb-connect-bar.r82-status:has(.r134-net-name){
+  position:static!important;flex:0 0 30px!important;min-height:30px!important;height:30px!important;
+  box-sizing:border-box;margin:1px 0!important;padding:0!important;border:0!important;background:transparent!important
+}
+.wb-connect-bar.r82-status .r86-net-status:has(.r134-net-name){
+  position:absolute!important;z-index:12!important;inset:auto 12px 38px!important;
+  width:auto!important;max-height:min(30vh,200px)!important;overflow:auto!important;
+  padding:6px 10px!important;box-sizing:border-box;border:1px solid #c5d6cf!important;
+  border-radius:7px;background:#f5f9f7!important;box-shadow:0 2px 10px #173b341b
+}
+
+.wb-canvas button.r136-branch-hit{position:absolute;z-index:10;min-height:0!important;padding:0!important;border:0!important;background:transparent!important;cursor:text}
+.wb-canvas button.r136-branch-hit:hover,.wb-canvas button.r136-branch-hit:focus-visible{outline:2px solid #357d73;outline-offset:1px}

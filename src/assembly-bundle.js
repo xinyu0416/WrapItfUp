@@ -139,6 +139,11 @@
     }
   }
   function sourceMap(project){const found=new Map(D.sourcesFor(project).map(f=>[f.name,f.text]));for(const module of arr(project.modules)){const name=module.sourceFilename||module.filename||module.name+'.v';if(!found.has(name)&&module.source)found.set(name,module.source);}return found;}
+  function moduleFile(project,module){
+    const name=module.sourceFilename||module.filename||module.name+'.v';
+    const text=sourceMap(project).get(name);
+    return typeof text==='string' && text.trim() ? {name,text} : null;
+  }
   // The runner creates module.v aliases inside its isolated work directory. Only
   // this export snapshot uses canonical filenames; raw source identities stay intact.
   function orgSnapshot(project){const sources=sourceMap(project);return {...project,modules:arr(project.modules).map(module=>{const name=module.sourceFilename||module.filename||module.name+'.v';return str(sources.get(name)).trim()?{...module,filename:module.name+'.v'}:module;})};}
@@ -156,7 +161,7 @@
       safePath(header);const workPaths=new Map(),sourceFiles=[];
       const reserve=(path,role)=>{safePath(path);const key=path.toLowerCase();if(workPaths.has(key))throw Error('組態 '+mode+' 的工作檔衝突：'+path+'（'+role+' / '+workPaths.get(key)+'）');workPaths.set(key,role);};
       [top+'.v',top+'.v.org',top+'.empty.v',top+'.output.cfg',header,'gen_empty.py'].forEach(name=>reserve(name,'generated'));
-      put(prefix+top+'.v.org',C.exportOrg(orgSnapshot(p)),'Company gen_top constraints and template; module filename aliases are supplied by the runner');
+      put(prefix+top+'.v.org',(globalThis.WIUCompany||require('./assembly-company')).org(p),'Company gen_top constraints and template; module filename aliases are supplied by the runner');
       put(prefix+top+'.v',C.exportVerilog(p),'Direct website-generated normal Top candidate');
       put(prefix+top+'.empty.v',s.verilog,'Direct website-generated replacement stub');
       put(prefix+top+'.output.cfg',s.configText,'Optional Empty overrides only; omitted outputs default to zero');
@@ -207,5 +212,5 @@
     for(const file of list){safePath(file.path);const key=file.path.toLowerCase();if(seen.has(key))throw Error('ZIP 路徑重複：'+file.path);seen.add(key);const name=encode(file.path),data=file.data instanceof Uint8Array?file.data:encode(str(file.text)),crc=crc32(data);if(data.length>0xffffffff||offset+data.length>0xffffffff)throw Error('ZIP 大小超過上限。');const h=block(30+name.length);write32(h,0,0x04034b50);write16(h,4,20);write16(h,6,0x800);write16(h,12,33);write32(h,14,crc);write32(h,18,data.length);write32(h,22,data.length);write16(h,26,name.length);h.set(name,30);chunks.push(h,data);const c=block(46+name.length);write32(c,0,0x02014b50);write16(c,4,20);write16(c,6,20);write16(c,8,0x800);write16(c,14,33);write32(c,16,crc);write32(c,20,data.length);write32(c,24,data.length);write16(c,28,name.length);write32(c,42,offset);c.set(name,46);central.push(c);offset+=h.length+data.length;}
     const centralSize=central.reduce((n,c)=>n+c.length,0),end=block(22);write32(end,0,0x06054b50);write16(end,8,list.length);write16(end,10,list.length);write32(end,12,centralSize);write32(end,16,offset);const out=block(offset+centralSize+22);let pos=0;for(const chunk of chunks.concat(central,[end])){out.set(chunk,pos);pos+=chunk.length;}return out;
   }
-  return {defaults,normalize,validate,stub,files,referenceFiles,zip,manifest,profileProjects,exportIssues,safePath,orgSnapshot,sourceMap,assertSourceIsolation,assertModeSelector,wiringReview,reviewText};
+  return {defaults,normalize,validate,stub,files,referenceFiles,zip,manifest,profileProjects,exportIssues,safePath,orgSnapshot,sourceMap,moduleFile,assertSourceIsolation,assertModeSelector,wiringReview,reviewText};
 });

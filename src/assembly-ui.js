@@ -88,8 +88,9 @@
       });
     });
   }
-  function backgroundStatus(scene){if(!scene.previewOnly)return scene.boundedRouting?'<div class="r129-background"><span>大型圖面：快速避障與全圖檢查已完成。剩餘衝突見下方提醒；需要時再從「排列與走線」精細修復。</span></div>':'';
-    return '<div class="r129-background" role="status"><span data-graph-background-message>'+esc(graphJob?.message||'快速接線預覽')+'</span><small>線路為暫時路徑，交叉／避障尚未確認；實際接線與 RTL 不受影響。</small><button data-action="graph-background-toggle">'+(graphJob?.status==='running'?'暫停整理':'重新整理')+'</button></div>';
+  function backgroundStatus(scene){
+    if(!scene.previewOnly)return '';
+    return '<span class="r134-route-progress" role="status"><span data-graph-background-message>'+esc(graphJob?.message||'接線預覽 · 圖面待檢查')+'</span><button data-action="graph-background-toggle">'+(graphJob?.status==='running'?'暫停整理':'繼續整理')+'</button></span>';
   }
   async function drawingTask(kind,options={}){
     if(drawingBusy){toast('圖面工作正在執行，可在視窗內取消。');return null;}
@@ -106,8 +107,71 @@
   const sheetViews=new Map();
   const stagebar=document.createElement('nav');stagebar.className='r69-stagebar';stagebar.setAttribute('aria-label','工作階段');document.body.append(stagebar);
   project=W.normalize(project);saved=JSON.stringify(project);
-  function workspace(){return {railDisclosures:{...railDisclosures},railScroll,railQuery,railUsage,graphArtwork,graphFocus,focusRail,graphPan:{...graphPan},graphZoom,lastDesignTab,lastDesignView,lastDesignModule,railOpen,activeModule,view:currentView,tab,priorWorkTab,connectionView,focusedPin,instanceFilter,filter,onlyUnbound,rtlOpen,selected:[...selected],scroll:$('.a-panel',shell)?.scrollTop||0,diagramUi:window.WIUBridge?.uiSnapshot()||null};}
-  function restoreWorkspace(ws={}){railOwner=project.workbook.projectId;railDisclosures=UX.disclosures(ws.railDisclosures);railScroll=Number(ws.railScroll)||0;railQuery=ws.railQuery||'';railUsage=['all','used','unused'].includes(ws.railUsage)?ws.railUsage:'all';sheetViews.clear();previousGraphView=null;graphArtwork=!!ws.graphArtwork;graphFocus=!!ws.graphFocus;focusRail=ws.focusRail!==false;graphPan={x:Number(ws.graphPan?.x)||0,y:Number(ws.graphPan?.y)||0};graphReadablePending=!Number.isFinite(ws.graphZoom);graphViewportAuto=graphReadablePending;graphZoom=Number.isFinite(ws.graphZoom)?ws.graphZoom:1;lastDesignTab=ws.lastDesignTab||'graph';lastDesignView=ws.lastDesignView||ws.view||'assembly';lastDesignModule=ws.lastDesignModule||ws.activeModule||'top';railOpen=ws.railOpen!==false;activeModule=ws.activeModule==='top'||project.modules.some(m=>m.id===ws.activeModule)?ws.activeModule:'top';tab=labels[ws.tab]?ws.tab:'graph';priorWorkTab=ws.priorWorkTab||'graph';connectionView=ws.connectionView||'cards';focusedPin=ws.focusedPin||'';instanceFilter=ws.instanceFilter||'';filter=ws.filter||'';onlyUnbound=!!ws.onlyUnbound;rtlOpen=!!ws.rtlOpen;selected=new Set(ws.selected||[]);currentView=ws.view==='diagram'?'diagram':'assembly';if(currentView==='diagram')openSheet(activeModule);else{view('assembly');render();}if(ws.diagramUi)window.WIUBridge?.restoreUi(ws.diagramUi);const panel=$('.a-panel',shell);if(panel)panel.scrollTop=ws.scroll||0;}
+  let groupFilterOwner='', hiddenGroups=new Set(), currentGroupModel=null;
+  function groupViewState() {
+    if (groupFilterOwner!==project.workbook.projectId) {
+      groupFilterOwner=project.workbook.projectId;
+      hiddenGroups=new Set();
+    }
+    return [...hiddenGroups];
+  }
+  function groupPreview() {
+    return window.WIUGroupDiagram.draw(currentGroupModel,hiddenGroups);
+  }
+  function groupPictureMarkup(picture) {
+    if (picture.svg) return picture.svg;
+    return '<p class="r133-empty">'+(currentGroupModel.groups.length?'目前選取的群組之間沒有連線。請勾選連線兩端的群組。':'沒有可顯示的群組連線。請在兩端的模組介面為已接線的 pin 指定 Group。')+'</p>';
+  }
+  function renderGroupPanel() {
+    groupViewState();
+    currentGroupModel=window.WIUGroupDiagram.model(project,netReview());
+    const picture=groupPreview(), owners=new Map();
+    for (const g of currentGroupModel.groups) {
+      if (!owners.has(g.owner)) owners.set(g.owner,[]);
+      owners.get(g.owner).push(g);
+    }
+    const groups=[...owners.values()].map(list=>'<fieldset><legend>'+esc(list[0].instance)+'</legend>'+list.map(g=>'<label><input type="checkbox" data-group-visible="'+esc(g.key)+'" '+(hiddenGroups.has(g.key)?'':'checked')+'>'+esc(g.name)+'</label>').join('')+'</fieldset>').join('');
+    const filter=currentGroupModel.groups.length?'<details class="r133-filter"><summary>勾選顯示的 Group</summary><div class="r133-filter-tools"><input type="search" placeholder="搜尋 instance 或 group" aria-label="搜尋 instance 或 group" data-group-search><button data-action="group-select-all">全選</button><button data-action="group-select-none">清除勾選</button></div><div class="r133-choices">'+groups+'</div><small>一條線的兩端都勾選時顯示。</small></details>':'';
+    return topViewTabs('groupGraph')+'<section class="r133-group-panel"><div class="r133-controls">'+filter+'<span aria-live="polite" data-group-count>'+picture.count+' 組連線</span><button data-action="group-svg" '+(!picture.count?'disabled':'')+'>下載 SVG</button><button data-action="group-png" '+(!picture.count?'disabled':'')+'>下載 PNG</button></div><div class="r133-picture" data-group-picture>'+groupPictureMarkup(picture)+'</div></section>';
+  }
+  function refreshGroupPicture() {
+    const host=$('[data-group-picture]',shell);
+    if (!host) return;
+    const picture=groupPreview();
+    host.innerHTML=groupPictureMarkup(picture);
+    $('[data-group-count]',shell).textContent=picture.count+' 組連線';
+    for (const b of $$('[data-action="group-svg"],[data-action="group-png"]',shell)) b.disabled=!picture.count;
+    stash();
+  }
+  function selectGroups(all) {
+    hiddenGroups=new Set(all?[]:currentGroupModel.groups.map(g=>g.key));
+    for (const input of $$('[data-group-visible]',shell)) input.checked=all;
+    refreshGroupPicture();
+  }
+  async function exportGroupPicture(format) {
+    const picture=groupPreview();
+    if (!picture.count) return;
+    const name=filename()+'-groups.'+format;
+    if (format==='svg') return download(name,picture.svg,'image/svg+xml;charset=utf-8');
+    const url=URL.createObjectURL(new Blob([picture.svg],{type:'image/svg+xml;charset=utf-8'}));
+    try {
+      const img=new Image();
+      img.src=url;
+      await img.decode();
+      const scale=Math.min(2,8192/picture.width,8192/picture.height,Math.sqrt(16000000/(picture.width*picture.height)));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.ceil(picture.width*scale));
+      canvas.height=Math.max(1,Math.ceil(picture.height*scale));
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+      if (!blob) throw Error('PNG 編碼失敗');
+      download(name,new Uint8Array(await blob.arrayBuffer()),'image/png');
+    } catch (error) {toast('無法產生 PNG，可改下載 SVG。'+error.message);}
+    finally {URL.revokeObjectURL(url);}
+  }
+
+  function workspace(){return {hiddenGroups:groupViewState(),railDisclosures:{...railDisclosures},railScroll,railQuery,railUsage,graphArtwork,graphFocus,focusRail,graphPan:{...graphPan},graphZoom,lastDesignTab,lastDesignView,lastDesignModule,railOpen,activeModule,view:currentView,tab,priorWorkTab,connectionView,focusedPin,instanceFilter,filter,onlyUnbound,rtlOpen,selected:[...selected],scroll:$('.a-panel',shell)?.scrollTop||0,diagramUi:window.WIUBridge?.uiSnapshot()||null};}
+  function restoreWorkspace(ws={}){groupFilterOwner=project.workbook.projectId;hiddenGroups=new Set(Array.isArray(ws.hiddenGroups)?ws.hiddenGroups:[]);railOwner=project.workbook.projectId;railDisclosures=UX.disclosures(ws.railDisclosures);railScroll=Number(ws.railScroll)||0;railQuery=ws.railQuery||'';railUsage=['all','used','unused'].includes(ws.railUsage)?ws.railUsage:'all';sheetViews.clear();previousGraphView=null;graphArtwork=!!ws.graphArtwork;graphFocus=!!ws.graphFocus;focusRail=ws.focusRail!==false;graphPan={x:Number(ws.graphPan?.x)||0,y:Number(ws.graphPan?.y)||0};graphReadablePending=!Number.isFinite(ws.graphZoom);graphViewportAuto=graphReadablePending;graphZoom=Number.isFinite(ws.graphZoom)?ws.graphZoom:1;lastDesignTab=ws.lastDesignTab||'graph';lastDesignView=ws.lastDesignView||ws.view||'assembly';lastDesignModule=ws.lastDesignModule||ws.activeModule||'top';railOpen=ws.railOpen!==false;activeModule=ws.activeModule==='top'||project.modules.some(m=>m.id===ws.activeModule)?ws.activeModule:'top';tab=labels[ws.tab]?ws.tab:'graph';priorWorkTab=ws.priorWorkTab||'graph';connectionView=ws.connectionView||'cards';focusedPin=ws.focusedPin||'';instanceFilter=ws.instanceFilter||'';filter=ws.filter||'';onlyUnbound=!!ws.onlyUnbound;rtlOpen=!!ws.rtlOpen;selected=new Set(ws.selected||[]);currentView=ws.view==='diagram'?'diagram':'assembly';if(currentView==='diagram')openSheet(activeModule);else{view('assembly');render();}if(ws.diagramUi)window.WIUBridge?.restoreUi(ws.diagramUi);const panel=$('.a-panel',shell);if(panel)panel.scrollTop=ws.scroll||0;}
   function renderRail(){
     if(railOwner!==project.workbook.projectId){railOwner=project.workbook.projectId;railDisclosures={};railScroll=0;railQuery='';railUsage='all';}
     rail.innerHTML=V.rail(project,activeModule,currentView,{query:railQuery,usage:railUsage,disclosures:railDisclosures});
@@ -188,17 +252,19 @@
     const historyButton=(key,label)=>{const item=history[key];return '<button data-action="'+key+'" '+(!item?'disabled ':'')+'aria-label="'+label+'" title="'+esc(item?label+'：'+item.label+' · '+(item.scopeName||item.scope):'目前範圍沒有可'+label+'的操作')+'">'+(key==='undo'?'↶':'↷')+' '+label+'</button>';};
     const defines=(project.defineConfig?.rows||[]).filter(r=>r.enabled!==false&&r.name).map(r=>r.name+(r.value!==undefined&&r.value!==''?'='+r.value:''));
     const configLabel=defines.length?defines.slice(0,2).join(', ')+(defines.length>2?' ＋'+(defines.length-2):''):'未啟用 Defines';
+    const compact=currentView==='assembly' && tab==='graph';
+    const saveAlert=save.draftStatus==='failed'?'草稿暫存失敗':save.pendingEdit?'欄位待套用':save.practice?'範例練習':'';
     const formats=module?'<button data-action="canvas-format" data-format="png">PNG 圖片</button><button data-action="canvas-format" data-format="pdf">PDF 文件</button><button data-action="canvas-format" data-format="svg">SVG 可編輯圖</button>':'<p>進階相容 VBS · 主要下載已使用目前走線</p><button data-action="graph-visio">固定圖形（相容備用）</button><button data-action="graph-visio-routed-legacy">分段走線（舊版相容）</button><button data-action="graph-visio-native">直連（比較用途）</button>';
     return '<div class="r118-header-main"><button class="ux-brand" data-nav="home" aria-label="WrapItfUp 首頁"><b>Wrap<span>Itf</span>Up<span class="ux-version">'+VERSION+'</span></b></button>'+
       (working?'<button data-action="rail-toggle" aria-expanded="'+railOpen+'">模組列表</button>'+(!railOpen?'<button data-action="wb-add">＋ 子模組</button>':'')+'<div class="r118-breadcrumb" title="'+esc(project.top+' / '+(m?.name||'Top 接線'))+'">'+headerName(m?activeModule:'top')+'<small>'+(m?(activeModule==='top'?'Top 對外介面':'共用定義 · '+project.instances.filter(i=>i.module===m.name).length+' 顆實例'):'Top 接線')+'</small></div><div class="r110-stages"><button data-action="stage-design" '+(design?'aria-current="page"':'')+'>設計</button><button data-tab="check" '+(tab==='check'?'aria-current="page"':'')+'>檢查'+(n?' · '+n:'')+'</button><button data-tab="bundle" '+(['bundle','export'].includes(tab)?'aria-current="page"':'')+'>產生 RTL／gen_top</button></div><div class="r118-history" data-universal-history>'+historyButton('undo','復原')+historyButton('redo','重做')+'</div>':'')+
-      '<div class="r69-global-tools"><button data-action="save" title="'+esc(saveStatusText(save))+' · 下載完整專案 .wiu.json · Ctrl+S">儲存專案</button>'+
-      (working?'<button class="r116-vbs" data-action="canvas-vbs" title="'+esc((module?'模組介面：':'Top 接線圖：')+target.name)+'">↓ '+(module?'介面':'Top')+' VBS</button><details class="r69-menu r116-output"><summary>其他匯出</summary><div><strong>'+esc(target.name+(module?' · 介面圖':' · Top 接線圖'))+'</strong>'+formats+(module&&activeModule!=='top'?'<button data-action="wb-child-rtl">下載子模組 RTL</button>':'')+'</div></details>':'')+
-      '<details class="r69-menu"><summary>專案</summary><div><button data-action="load">開啟專案／圖檔 · Ctrl+O</button><button data-action="ux-new">建立新專案</button><button data-action="project-name">修改 Top 名稱</button><button data-action="recent-download">最近一次匯出／重試</button>'+(working?'<strong class="r118-menu-section">組態與紀錄</strong><button data-tab="defines" title="'+esc(defines.join(', '))+'">Defines · '+esc(configLabel)+'</button><button data-action="config-profiles">具名組態</button><button data-tab="sources">來源檔案</button><button data-action="history-open">操作紀錄</button><p class="r118-menu-note">'+esc(saveStatusText(save))+'</p>':'')+'<strong class="r118-menu-section">範本</strong><button data-action="demo">開啟完整範本</button>'+(sessionKind==='practice'?'<button data-action="example-info">完整範本說明</button><button data-action="wb-practice-save">另存為我的專案</button><button data-action="wb-practice-exit">退出範本</button>':'')+'</div></details><button data-action="help-menu">說明</button></div></div>'+(working?'<div class="r121-context-strip"><span class="r118-save-status">'+esc(saveStatusText(save))+'</span>'+(sessionKind==='practice'?'<strong>範本練習 · 不自動暫存</strong><button data-action="wb-practice-save">另存為我的專案</button>':'')+'<button data-tab="defines" title="目前有效 Defines">組態：'+esc(configLabel)+'</button><button data-action="recent-download" '+(!recentDownload?'disabled':'')+'>'+esc(recentDownload?'下載已送出：'+recentDownload.name+' · 重新下載':'尚無匯出')+'</button></div>':'');
+      '<div class="r69-global-tools">'+(compact?'<strong class="r134-save-alert" role="status" '+(saveAlert?'':'hidden')+'>'+esc(saveAlert)+'</strong>':'')+'<button data-action="save" title="'+esc(saveStatusText(save))+' · 下載完整專案 .wiu.json · Ctrl+S">儲存專案</button>'+
+      (working&&!(currentView==='assembly'&&tab==='groupGraph')?'<button class="r116-vbs" data-action="canvas-vbs" title="'+esc((module?'模組介面：':'Top 接線圖：')+target.name)+'">↓ '+(module?'介面':'Top')+' VBS</button><details class="r69-menu r116-output"><summary>其他匯出</summary><div><strong>'+esc(target.name+(module?' · 介面圖':' · Top 接線圖'))+'</strong>'+formats+(module&&activeModule!=='top'?'<button data-action="wb-child-rtl">下載子模組 RTL</button>':'')+'</div></details>':'')+
+      '<details class="r69-menu"><summary>專案'+(compact&&defines.length?' · '+esc(configLabel):'')+'</summary><div><button data-action="load">開啟專案／圖檔 · Ctrl+O</button><button data-action="ux-new">建立新專案</button><button data-action="project-name">修改 Top 名稱</button><button data-action="recent-download">最近一次匯出／重試</button>'+(working?'<strong class="r118-menu-section">組態與紀錄</strong><button data-tab="defines" title="'+esc(defines.join(', '))+'">Defines · '+esc(configLabel)+'</button><button data-action="config-profiles">具名組態</button><button data-tab="sources">來源檔案</button><button data-action="history-open">操作紀錄</button><p class="r118-menu-note'+(compact?' r118-save-status':'')+'">'+esc(saveStatusText(save))+'</p>':'')+'<strong class="r118-menu-section">範本</strong><button data-action="demo">開啟完整範本</button>'+(sessionKind==='practice'?'<button data-action="example-info">完整範本說明</button><button data-action="wb-practice-save">另存為我的專案</button><button data-action="wb-practice-exit">退出範本</button>':'')+'</div></details><button data-action="help-menu">說明</button></div></div>'+(working&&!compact?'<div class="r121-context-strip"><span class="r118-save-status">'+esc(saveStatusText(save))+'</span>'+(sessionKind==='practice'?'<strong>範本練習 · 不自動暫存</strong><button data-action="wb-practice-save">另存為我的專案</button>':'')+'<button data-tab="defines" title="目前有效 Defines">組態：'+esc(configLabel)+'</button><button data-action="recent-download" '+(!recentDownload?'disabled':'')+'>'+esc(recentDownload?'下載已送出：'+recentDownload.name+' · 重新下載':'尚無匯出')+'</button></div>':'');
 
   }
   // The net focus set belongs to the viewport, never to project, undo, VBS or RTL.
-  const graphNetFocus=new Set(),graphDirectNetFocus=new Set(),graphGroupFocus=new Set();
-  let graphConnectMode=false,graphQuickConnect=false,graphPinHint='',graphObject=null,graphTableOrigin=null;
+  const graphNetFocus=new Set(),graphDirectNetFocus=new Set(),graphGroupFocus=new Set(),graphPinSelection=new Set();
+  let graphConnectMode=false,graphQuickConnect=false,graphPinHint='',graphObject=null,graphTableOrigin=null,graphPinOwner='';
   // One graph search session and one set of commands for GUI and keyboard.
   let graphFindPanel=null,graphFindMode='find',graphFindIndex=0,graphFindPlan=null,graphFindOwner='',graphClipboard=null;
   function graphFindVisible(){return !!graphFindPanel&&!graphFindPanel.hidden&&currentView==='assembly'&&tab==='graph';}
@@ -246,14 +312,40 @@
     }
     graphFindMode=mode;graphFindOwner=project.workbook.projectId;graphFindPanel.hidden=false;for(const e of $$('[data-r111-replace]',graphFindPanel))e.hidden=mode!=='replace';refreshGraphFind(true);$('#r111-query',graphFindPanel).focus();return true;
   }
-  function copyGraphInstance(){const i=graphObject?.kind==='instance'&&project.instances.find(i=>i.id===graphObject.id);if(!i)return false;const m=project.modules.find(m=>m.name===i.module);graphClipboard={instance:A.clone(i),module:W.interfaceKey(m),projectId:project.workbook.projectId,inputs:A.clone(project.connections.filter(c=>c.instance===i.id&&m.ports.some(p=>p.name===c.port&&p.direction==='input')))};toast('已複製 '+i.name+'；貼上保留輸入接線，輸出保持未接，避免多重驅動。');return true;}
+  function copyGraphInstance(){const i=graphObject?.kind==='instance'&&project.instances.find(i=>i.id===graphObject.id);if(!i)return false;const m=project.modules.find(m=>m.name===i.module);graphClipboard={instance:A.clone(i),module:W.interfaceKey(m),projectId:project.workbook.projectId,inputs:A.clone(project.connections.filter(c=>c.instance===i.id&&m.ports.some(p=>p.name===c.port&&p.direction==='input')))};return true;}
+  function graphSignalPayload(){
+    if(graphPinOwner!==project.workbook.projectId)graphPinSelection.clear();
+    const scene=graphGroupFocus.size?window.WIUTopScene.create(project):null;
+    const rows=window.WIUGraphClipboard.rows(project,{object:graphObject,pins:[...graphPinSelection],nets:[...graphNetFocus],groups:(scene?.groups||[]).filter(g=>graphGroupFocus.has(g.key))});
+    if(!rows.length)return null;
+    const native=graphObject?.kind==='instance'&&copyGraphInstance()?{format:'WrapItfUp.GraphInstance',...graphClipboard}:undefined;
+    return {text:window.SignalClipboard.encode('WrapItfUp',rows,native),count:rows.length};
+  }
+  async function copyGraphSelection(){
+    const payload=graphSignalPayload();if(!payload)return false;
+    try{await navigator.clipboard.writeText(payload.text);toast('已複製 '+payload.count+' 個訊號。');return true;}
+    catch{toast('請在所選訊號上按 Ctrl+C 複製。');return false;}
+  }
+  function pasteGraphText(text){
+    const data=window.SignalClipboard.decode(text);if(!data)return false;
+    const native=data.native;
+    if(data.source==='WrapItfUp'&&native?.format==='WrapItfUp.GraphInstance'&&native.instance&&Array.isArray(native.inputs)){
+      graphClipboard=A.clone(native);pasteGraphInstance();return true;
+    }
+    openSheet('top');return window.WIUPortEditing.pasteText(text)!==false;
+  }
+  async function pasteGraphSelection(){
+    const owner=project.workbook.projectId;
+    try{const text=await navigator.clipboard.readText();if(!graphActive()||project.workbook.projectId!==owner)return;if(!pasteGraphText(text))toast('請先複製整個訊號或 Instance。');}
+    catch{toast('請在畫布按 Ctrl+V 貼上。');}
+  }
   function pasteGraphInstance(){if(!graphClipboard){toast('請先選取 Instance 並複製。');return;}const m=project.modules.find(m=>m.name===graphClipboard.instance.module);if(!m||W.interfaceKey(m)!==graphClipboard.module){toast('目的專案缺少相同介面的模組，請先匯入來源。');return;}
     const next=A.clone(graphClipboard.instance),base=next.name.replace(/_copy\d*$/,'')+'_copy',used=new Set(project.instances.map(i=>i.name).concat(project.nets.map(n=>n.name),(project.parameters||[]).map(p=>p.name)));let name=base,n=2;while(used.has(name))name=base+n++;next.id=uid();next.name=name;next.nameBinding={mode:'custom',lastGenerated:name};
     commit(()=>{project.instances.push(next);if(graphClipboard.projectId===project.workbook.projectId)for(const c of graphClipboard.inputs)project.connections.push({...c,id:uid(),instance:next.id});const pos=project.workbook.graphPositions?.[graphClipboard.instance.id];if(pos)project.workbook.graphPositions[next.id]={x:pos.x+48,y:pos.y+48};project.orgEdited=true;},'已貼上 '+name+'；輸出保持未接，可直接接線。');selectGraphInstance(next.id);
   }
-  function graphCommand(command){if(command==='copy')return copyGraphInstance();if(command==='paste')return pasteGraphInstance();if(command==='duplicate'){if(copyGraphInstance())pasteGraphInstance();return;}if(command==='cut'){if(copyGraphInstance())actions['instance-delete']({dataset:{id:graphObject.id}});return;}if(command==='delete'){if(graphObject?.kind==='instance')actions['instance-delete']({dataset:{id:graphObject.id}});else if(graphNetFocus.size===1){const n=project.nets.find(n=>n.name===[...graphNetFocus][0]);if(n)actions['net-delete']({dataset:{id:n.id}});}return;}if(command==='edit'&&graphObject?.kind==='instance')instanceForm(graphObject.id);}
+  function graphCommand(command){if(command==='copy')return copyGraphSelection();if(command==='paste')return pasteGraphSelection();if(command==='duplicate'){if(copyGraphInstance())pasteGraphInstance();return;}if(command==='cut'){const id=graphObject?.kind==='instance'&&graphObject.id,owner=project.workbook.projectId;if(id)return copyGraphSelection().then(done=>{if(done&&graphActive()&&project.workbook.projectId===owner)actions['instance-delete']({dataset:{id}});});return;}if(command==='delete'){if(graphObject?.kind==='instance')actions['instance-delete']({dataset:{id:graphObject.id}});else if(graphNetFocus.size===1){const n=project.nets.find(n=>n.name===[...graphNetFocus][0]);if(n)actions['net-delete']({dataset:{id:n.id}});}return;}if(command==='edit'&&graphObject?.kind==='instance')instanceForm(graphObject.id);}
   window.WIUGraphFind={open:openGraphFind,close:closeGraphFind,isOpen:graphFindVisible,next:nextGraphFind,refresh:refreshGraphFind};
-  window.WIUGraphCommands={run:graphCommand,selection:()=>graphObject?A.clone(graphObject):null,can:command=>command==='paste'?!!graphClipboard:command==='delete'?(graphObject?.kind==='instance'||graphNetFocus.size===1):graphObject?.kind==='instance'};
+  window.WIUGraphCommands={run:graphCommand,selection:()=>graphObject?A.clone(graphObject):null,can:command=>command==='paste'?true:command==='copy'?!!(graphObject||graphPinSelection.size||graphGroupFocus.size||graphNetFocus.size):command==='delete'?(graphObject?.kind==='instance'||graphNetFocus.size===1):graphObject?.kind==='instance'};
   let objectMenu=null;
   function closeObjectMenu(){if(objectMenu)objectMenu.hidden=true;}
   shell.addEventListener('contextmenu',e=>{if(!graphActive())return;const block=e.target.closest('.wb-block'),handle=e.target.closest('[data-graph-drag]')||block?.querySelector('[data-graph-drag]');if(!handle)return;e.preventDefault();selectGraphInstance(handle.dataset.graphDrag);
@@ -268,9 +360,24 @@
   function netReview(){const key=JSON.stringify([project.workbook.projectId,project.modules,project.instances,project.nets,project.connections,project.assigns,project.parameters,project.defineConfig,project.workbook.diagrams]);if(netReviewCache?.key!==key)netReviewCache={key,value:window.WIUNetReview.index(project)};return netReviewCache.value;}
   function navigationNet(){return graphNetFocus.size===1?[...graphNetFocus][0]:null;}
   function navigationTools(){
-    const name=navigationNet();if(!name)return '<small>選取一條 net 可定位 Driver / Load</small>';
-    const n=netReview().net(name),nav=netNavigation?.name===name&&netNavigation.owner===project.workbook.projectId?netNavigation:null;
-    return '<span class="r132-net-navigation" aria-label="接線端點定位">'+[['drivers','Driver 驅動',n.drivers],['loads','Load 接收',n.loads],['bidirectional','雙向',n.bidirectional]].filter(x=>x[0]!=='bidirectional'||x[2].length).map(([kind,label,list])=>'<button type="button" data-action="net-nav-list" data-kind="'+kind+'" '+(!list.length?'disabled':'')+'>'+label+' '+list.length+'</button>').join('')+(!n.drivers.length?'<small>未找到單向 Driver</small>':n.drivers.length>1?'<small>多個 Driver，請核對切片／驅動狀態</small>':'')+(n.loads.length>1?'<button data-action="net-nav-step" data-delta="-1" aria-label="上一個 Load">← Load</button><button data-action="net-nav-step" data-delta="1" aria-label="下一個 Load">Load →</button>':'')+(nav?.key?'<small>'+esc(nav.label)+'</small>':'')+(nav?.origin?'<button data-action="net-nav-back">返回原視野</button>':'')+'</span>';
+    const name=navigationNet();
+    if(!name)return '';
+    const net=netReview().net(name);
+    const nav=netNavigation?.name===name && netNavigation.owner===project.workbook.projectId ? netNavigation : null;
+    function endpoint(kind,title){
+      const rows=net[kind];
+      const row=(nav?.kind===kind && rows.find(e=>e.key===nav.key)) || rows[0];
+      const pos=row?rows.indexOf(row)+1:0;
+      const who=kind==='drivers'?'Driver':kind==='loads'?'Load':'雙向';
+      const index=rows.length>1?' <small>'+(nav?.kind===kind?pos+' / '+rows.length:rows.length+' 個 · 首筆')+'</small>':'';
+      const path=row?[row.instanceName,row.group==='—'?null:row.group,row.pin].filter(Boolean).map(esc).join('<wbr> / '):'尚無端點';
+      const label=who+' '+pos+' / '+rows.length;
+      return '<div class="r134-end"><button type="button" class="r134-endpoint" data-action="net-nav-list" data-kind="'+kind+'" '+(!row?'disabled ':'')+'title="'+esc(label)+'" aria-label="'+esc(label+(row?' · '+[row.instanceName,row.group,row.pin].join(' / '):''))+'"><span>'+title+index+'</span><code>'+path+'</code></button>'+
+        (kind==='loads'&&rows.length>1?'<div class="r134-cycle"><button data-action="net-nav-step" data-delta="-1" aria-label="上一個 Load" title="上一個 Load">‹</button><button data-action="net-nav-step" data-delta="1" aria-label="下一個 Load" title="下一個 Load">›</button></div>':'')+'</div>';
+    }
+    return '<div class="r134-paths">'+endpoint('drivers','Driver 驅動')+endpoint('loads','Load 接收')+(net.bidirectional.length?endpoint('bidirectional','雙向端點'):'')+'</div>'+
+      (net.drivers.length>1?'<small class="r134-driver-warning">多個 Driver，請核對切片與驅動。</small>':'')+
+      (nav?.origin?'<button data-action="net-nav-back">返回原視野</button>':'');
   }
   function navigateEndpoint(kind,key){
     const name=navigationNet();if(!name)return;
@@ -320,6 +427,7 @@
   }
   function selectGraphInstance(id){
     if(!project.instances.some(i=>i.id===id))return;
+    graphPinSelection.clear();
     graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();graphPinHint='';
     graphObject={kind:'instance',id,projectId:project.workbook.projectId};
     if(graphStart){finishGraphConnection();refreshGraphConnection();}else applyGraphNetFocus();
@@ -364,6 +472,7 @@
     go('connections');
   }
   function selectGraphGroup(key,append=false){
+    graphPinSelection.clear();
     graphObject=null;graphPinHint='';
     if(!append){graphDirectNetFocus.clear();graphGroupFocus.clear();}
     if(append&&graphGroupFocus.has(key))graphGroupFocus.delete(key);
@@ -372,6 +481,8 @@
   }
   function applyGraphNetFocus(){
     const canvas=$('.wb-canvas',shell);if(!canvas)return;
+    if(graphPinOwner!==project.workbook.projectId)graphPinSelection.clear();
+    for(const el of $$('[data-graph-copy-pin]',canvas))el.setAttribute('aria-pressed',String(graphPinSelection.has(el.dataset.graphCopyPin)));
     let inspected;
     if(graphObject?.kind==='pin'&&graphObject.projectId===project.workbook.projectId){
       inspected=window.WIUGraphWiring.endpoints(project).find(e=>e.key===graphObject.id);
@@ -414,8 +525,17 @@
     if(status){
       status.hidden=!active&&!graphPinHint&&!commands;
       if(active){
-        const info=graphNetDetails();
-        status.innerHTML='<span class="r118-object-tools">'+commands+'</span><strong>'+(graphGroupFocus.size?'Group '+graphGroupFocus.size+' 個 · ':'')+'追蹤 '+info.length+' 條 net<\/strong><span class="r87-net-names">'+info.map(x=>'<code>'+esc(x.name+x.range)+'<\/code>').join(' ')+'<\/span>'+navigationTools()+(graphGroupFocus.size?'<button type="button" data-action="graph-group-ports">組內接腳</button><button type="button" data-action="graph-group-batch">批次設定組內接腳</button>':'')+'<button type="button" data-graph-net-details>端點詳情<\/button><button type="button" data-graph-clear-net title="取消追蹤" aria-label="取消追蹤">×<\/button>';
+        const info=project.nets.filter(n=>graphNetFocus.has(n.name));
+        const tools=commands?'<div class="r118-object-tools">'+commands+'</div>':'';
+        const title=info.length===1?'Net':(graphGroupFocus.size?'Group '+graphGroupFocus.size+' 個 · ':'')+'追蹤 '+info.length+' 條 net';
+        const names=info.slice(0,4).map(x=>'<code>'+esc(x.name+(x.range||''))+'</code>').join(' ')+(info.length>4?' <small>＋'+(info.length-4)+'</small>':'');
+        const groupActions=graphGroupFocus.size?'<button data-action="graph-group-ports">組內接腳</button><button data-action="graph-group-batch">批次設定組內接腳</button>':'';
+        const body=tools+'<div class="r134-net-name"><span>'+title+'</span>'+names+(info.length===1?'<button data-branch-edit="net">改線名</button><button data-branch-edit="label">線段標籤</button>':'')+'</div>'+navigationTools()+groupActions+'<button data-graph-net-details>端點詳情</button><button data-graph-clear-net title="取消追蹤" aria-label="取消追蹤">×</button>';
+        if(status._traceMarkup!==body || !status.querySelector('.r134-net-name')){
+          const focus=status.contains(document.activeElement)?document.activeElement.dataset:null;
+          status.innerHTML=body;status._traceMarkup=body;
+          if(focus){const keys=Object.entries(focus);if(keys.length)[...status.querySelectorAll('button')].find(b=>keys.every(([k,v])=>b.dataset[k]===v))?.focus({preventScroll:true});}
+        }
       }else if(commands){status.innerHTML='<span class="r118-object-tools">'+commands+'</span><button type="button" data-graph-clear-net aria-label="取消選取">×</button>';}
       else if(graphPinHint){status.innerHTML='<span class="r87-net-names">'+esc(graphPinHint)+'<\/span><button data-graph-clear-net aria-label="關閉提示">×<\/button>';}
       else status.innerHTML='';
@@ -423,14 +543,28 @@
   }
   function selectGraphNet(name,append=false,object=null){
     const exists=project.nets.some(n=>n.name===name);if(!exists)return;
+    graphPinSelection.clear();
     if(navigationNet()!==name)netNavigation=null;graphObject=object;graphPinHint='';
     if(!append){graphDirectNetFocus.clear();graphGroupFocus.clear();}
     if(append&&graphDirectNetFocus.has(name))graphDirectNetFocus.delete(name);else graphDirectNetFocus.add(name);
     recomputeGraphNetFocus();applyGraphNetFocus();
   }
   function clearGraphNetFocus(){
+    graphPinSelection.clear();
     graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();netNavigation=null;
     graphObject=null;graphPinHint='';applyGraphNetFocus();
+  }
+  function selectGraphPinForCopy(key,append=false){
+    if(graphPinOwner!==project.workbook.projectId)graphPinSelection.clear();
+    graphPinOwner=project.workbook.projectId;
+    const end=window.WIUGraphWiring.endpoints(project).find(e=>e.key===key);if(!end)return;
+    if(graphStart||graphConnectMode){finishGraphConnection();refreshGraphConnection();}
+    graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();netNavigation=null;
+    if(!append)graphPinSelection.clear();
+    if(append&&graphPinSelection.has(key))graphPinSelection.delete(key);else graphPinSelection.add(key);
+    graphObject=graphPinSelection.size===1?{kind:'pin',id:[...graphPinSelection][0],projectId:project.workbook.projectId}:null;
+    graphPinHint=graphPinSelection.size?'已選 '+graphPinSelection.size+' 個訊號 · Ctrl+C 複製':'';
+    applyGraphNetFocus();
   }
   async function downloadVisioWithGates(mode='native-routed'){
     let result;
@@ -452,7 +586,7 @@
     const G=window.WIUTopScene,before=JSON.stringify(project),plan=await drawingTask('layout',{kind});if(!plan)return;if(JSON.stringify(project)!==before){toast('專案已變更，請重新預覽。');return;}
     const title={arrange:'整理 Block 與 Top ports',repair:'修復線距與擴大空間',fine:'精細局部修復',optimize:'重新自動走線'}[kind];
     const picture=scene=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(G.svg(scene));
-    const summary=scene=>{const q=scene.routeQualityR98?.summary||{};return '安全衝突 '+(q.finalInvalid||0)+' · 線距不足 '+(q.parallelSpacing?.count||0)+' · 未完成跳線 '+(scene.crossingSummary?.unresolved||0);};
+    const summary=scene=>{const q=scene.routeQualityR98?.summary||{};return '安全衝突 '+(q.finalInvalid||0)+' · 線距不足 '+(q.parallelSpacing?.count||0)+' · 異網重疊 '+(scene.crossingSummary?.overlaps||0)+' · 跳線 '+(scene.crossingSummary?.bridges||0)+' · 未完成 '+(scene.crossingSummary?.unresolved||0);};
     openDialog(title+' · 變更預覽','<p>'+esc(kind==='arrange'?'重新安排 Block 與 Top ports，並整理接線。':kind==='fine'?'每輪約 8 秒的局部線距與轉角搜尋；完成檢查後顯示結果，可隨時取消。':kind==='optimize'?'重新計算路徑，取代手動走線；需要時擴大空間，保留鎖定 Block。':'先擴大不足的走線空間，再比較重排結果；保留手動線與鎖定 Block，不修改電氣綁定。')+'</p><p>'+esc(plan.note||'')+'</p><p>圖面尺寸：'+Math.round(plan.before.width)+' × '+Math.round(plan.before.height)+' → '+Math.round(plan.after.width)+' × '+Math.round(plan.after.height)+'</p><p>將移動 '+plan.moved+' 個 Block。套用是一筆可復原操作；取消不變更設計。</p><div class="r118-layout-compare"><figure><figcaption>目前 · '+summary(plan.before)+'</figcaption><img alt="目前排列" src="'+picture(plan.before)+'"></figure><figure><figcaption>預覽 · '+summary(plan.after)+'</figcaption><img alt="變更後排列" src="'+picture(plan.after)+'"></figure></div>',plan.unchanged?null:'套用 '+title,()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>{project=plan.project;},'已套用 '+title+'，可一次復原。',{label:title,scope:'top'});dialog.close();});
   }
   function optimizeGraphRoutes(){previewGraphLayout('optimize');}
@@ -501,6 +635,63 @@
     const lines=graphNetDetails().map(x=>'<div class="r87-net-detail"><h3><code>'+esc(x.name+x.range)+'<\/code><\/h3><p><b>起點：<\/b>'+esc(x.from.join('、')||'尚未辨識')+'<\/p><p><b>終點：<\/b>'+esc(x.to.join('、')||'尚未辨識')+'<\/p>'+(x.bidirectional.length?'<p><b>雙向：</b>'+esc(x.bidirectional.join('、'))+'</p>':'')+'<\/div>').join('');
     openDialog('目前追蹤的 net',lines||'<p>尚未選取連線。<\/p>');
   }
+  let selectedBranch,branchEditor;
+  function branchAt(hit,event){
+    const edge=window.WIUTopScene.peek(project)?.edges.find(e=>e.routeKey===hit.dataset.branchKey);
+    if(!edge)return;
+    const svg=hit.ownerSVGElement,point=svg.createSVGPoint();point.x=event.clientX;point.y=event.clientY;
+    const local=point.matrixTransform(hit.getScreenCTM().inverse());
+    selectedBranch={routeKey:edge.routeKey,net:edge.net,at:window.WIUWireLabels.fraction(edge,local),
+      clientX:event.clientX,clientY:event.clientY};
+  }
+  function closeBranchEditor(){const current=branchEditor;branchEditor=null;if(current){document.removeEventListener('pointerdown',current.outside,true);current.form.remove();}}
+  function editBranch(mode,anchor,existing){
+    if(branchEditor&&!branchEditor.finish())return;
+    const name=existing?project.nets.find(n=>n.id===existing.netId)?.name:navigationNet();
+    const net=project.nets.find(n=>n.name===name),scene=window.WIUTopScene.peek(project);
+    const edge=scene?.edges.find(e=>e.routeKey===(existing?.routeKey||selectedBranch?.routeKey)&&e.net===name)||scene?.edges.find(e=>e.net===name);
+    if(!net||!edge)return;
+    const selection=selectedBranch?.routeKey===edge.routeKey?selectedBranch:null;
+    const label=existing||{id:'label_'+(globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)),routeKey:edge.routeKey,netId:net.id,at:selection?.at??.5};
+    const initial=mode==='net'?name:existing?.text||'',form=document.createElement('form');
+    form.className='wire-inline-editor';form.setAttribute('aria-label',mode==='net'?'編輯整條 net 名稱':'編輯線段標籤');
+    form.innerHTML='<label><strong></strong><input autocomplete="off" spellcheck="false"></label><small role="status"></small>';
+    const input=form.querySelector('input'),hint=form.querySelector('small');
+    form.querySelector('strong').textContent=mode==='net'?'整條 net 名稱':'此線段的圖面標籤';
+    hint.textContent=mode==='net'?'連動端點、RTL 與 org · Enter 套用 · Esc 取消':'只顯示在這個分支 · 清空可移除 · Esc 取消';
+    input.value=initial;if(mode!=='net')input.maxLength=120;
+    const where=anchor?.getBoundingClientRect(),svg=shell.querySelector('#topSceneSvg');
+    let x=where?.left??innerWidth/2,y=where?.bottom??innerHeight/2;
+    if(svg){
+      const at=window.WIUWireLabels.position(edge,label.at),matrix=svg.getScreenCTM();
+      if(at&&matrix){
+        const pt=svg.createSVGPoint();pt.x=at.x;pt.y=at.y;
+        const screen=pt.matrixTransform(matrix);
+        if(screen.x>0&&screen.x<innerWidth&&screen.y>0&&screen.y<innerHeight){x=screen.x;y=screen.y;}
+      }
+    }
+    if(!anchor&&selection){x=selection.clientX;y=selection.clientY;}
+    form.style.left=Math.max(6,Math.min(x,innerWidth-302))+'px';form.style.top=Math.max(6,Math.min(y+5,innerHeight-112))+'px';
+    (document.fullscreenElement||document.body).append(form);
+    function finish(){
+      if(branchEditor?.form!==form)return true;
+      const value=input.value.trim();
+      if(value===initial){closeBranchEditor();return true;}
+      try{
+        commit(()=>{
+          if(mode==='net'){A.renameNet(project,net.id,value);project.orgEdited=true;}
+          else window.WIUWireLabels.set(project,label,value);
+        },'',{label:mode==='net'?'線名 '+name+' → '+value:'編輯線段標籤'});
+        closeBranchEditor();selectGraphNet(mode==='net'?value:name);return true;
+      }catch(error){hint.textContent=error.message;input.setAttribute('aria-invalid','true');return false;}
+    }
+    function outside(event){if(!form.contains(event.target)&&!finish()){event.preventDefault();event.stopImmediatePropagation();input.focus();}}
+    branchEditor={form,finish,outside};document.addEventListener('pointerdown',outside,true);form.onsubmit=e=>{e.preventDefault();finish();};
+    input.oninput=()=>input.removeAttribute('aria-invalid');
+    input.onkeydown=e=>{e.stopPropagation();if(e.isComposing||e.keyCode===229){if(e.key==='Enter')e.preventDefault();return;}
+      if(e.key==='Escape'){e.preventDefault();closeBranchEditor();}else if(e.key==='Enter'){e.preventDefault();finish();}};
+    form.onfocusout=e=>{if(!form.contains(e.relatedTarget))finish();};input.focus({preventScroll:true});input.select();
+  }
   function beginGraphLabelEdit(label){
     if(!label||!label.isConnected)return;
     label.readOnly=false;label.dataset.wireEditing='true';
@@ -515,20 +706,24 @@
   // Don't allow canvas pan/pointer capture to swallow a Group title click.
   // This must run in capture phase, before normal panning can claim the pointer.
   shell.addEventListener('pointerdown',e=>{
-    if(e.button!==0||!e.target.closest?.('[data-graph-group],[data-graph-group-select]'))return;
+    if(e.button!==0||!e.target.closest?.('[data-graph-group],[data-graph-group-select],[data-graph-copy-pin]'))return;
     e.stopImmediatePropagation();
   },true);
   shell.addEventListener('click',e=>{
+    const portName=e.target.closest('[data-graph-copy-pin]');
+    if(portName&&graphActive()){e.preventDefault();e.stopImmediatePropagation();selectGraphPinForCopy(portName.dataset.graphCopyPin,e.ctrlKey||e.metaKey);return;}
     const group=e.target.closest('[data-graph-group],[data-graph-group-select]');
     if(group){e.preventDefault();e.stopImmediatePropagation();selectGraphGroup(group.dataset.graphGroup||group.dataset.graphGroupSelect,e.ctrlKey||e.metaKey);return;}
     const clear=e.target.closest('[data-graph-clear-net]');if(clear){e.preventDefault();e.stopImmediatePropagation();clearGraphNetFocus();return;}
     if(e.target.closest('[data-graph-net-details]')){e.preventDefault();e.stopImmediatePropagation();showGraphNetDetails();return;}
     const label=e.target.closest('[data-wire-name]');
     if(label&&label.readOnly){e.preventDefault();e.stopImmediatePropagation();return;}
-    const hit=e.target.closest('[data-wire-hit]');if(hit){e.preventDefault();e.stopImmediatePropagation();selectGraphNet(hit.dataset.wireHit,e.ctrlKey||e.metaKey);return;}
-    if((graphObject||graphNetFocus.size||graphGroupFocus.size)&&e.target.closest('.wb-canvas')&&!e.target.closest('button,input,[data-graph-drag],[data-top-drag]'))clearGraphNetFocus();
+    const tag=e.target.closest('[data-branch-label]');if(tag){const label=project.workbook.wireLabels?.find(l=>l.id===tag.dataset.branchLabel);if(label){e.preventDefault();e.stopImmediatePropagation();editBranch('label',tag,label);}return;}
+    const edit=e.target.closest('[data-branch-edit]');if(edit){e.preventDefault();e.stopImmediatePropagation();editBranch(edit.dataset.branchEdit,edit);return;}
+    const hit=e.target.closest('[data-wire-hit]');if(hit){branchAt(hit,e);e.preventDefault();e.stopImmediatePropagation();selectGraphNet(hit.dataset.wireHit,e.ctrlKey||e.metaKey);return;}
+    if((graphObject||graphNetFocus.size||graphGroupFocus.size||graphPinSelection.size)&&e.target.closest('.wb-canvas')&&!e.target.closest('button,input,[data-graph-drag],[data-top-drag]'))clearGraphNetFocus();
   },true);
-  shell.addEventListener('dblclick',e=>{const handle=e.target.closest?.('[data-graph-drag]');if(handle){e.preventDefault();selectGraphInstance(handle.dataset.graphDrag);instanceForm(handle.dataset.graphDrag);return;}
+  shell.addEventListener('dblclick',e=>{const hit=e.target.closest?.('[data-wire-hit]');if(hit){e.preventDefault();e.stopImmediatePropagation();branchAt(hit,e);selectGraphNet(hit.dataset.wireHit);editBranch('label');return;}const handle=e.target.closest?.('[data-graph-drag]');if(handle){e.preventDefault();selectGraphInstance(handle.dataset.graphDrag);instanceForm(handle.dataset.graphDrag);return;}
     const label=e.target.closest?.('[data-wire-name]');
     if(label){e.preventDefault();e.stopImmediatePropagation();beginGraphLabelEdit(label);}
   },true);
@@ -540,6 +735,8 @@
       if(['Enter',' '].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();selectGraphNet(label.dataset.wireName,e.ctrlKey||e.metaKey);return;}
     }
     if(['Enter',' '].includes(e.key)){
+      const tag=e.target.closest?.('[data-branch-label]');
+      if(tag){e.preventDefault();e.stopImmediatePropagation();tag.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
       const group=e.target.closest?.('[data-graph-group],[data-graph-group-select]');
       if(group){e.preventDefault();e.stopImmediatePropagation();selectGraphGroup(group.dataset.graphGroup||group.dataset.graphGroupSelect,e.ctrlKey||e.metaKey);return;}
       const hit=e.target.closest?.('[data-wire-hit]');if(!hit)return;
@@ -547,14 +744,54 @@
     }
   },true);
   window.addEventListener('keydown',e=>{
+    const portName=e.target.closest?.('[data-graph-copy-pin]');
+    if(portName&&graphActive()&&['Enter',' '].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)selectGraphPinForCopy(portName.dataset.graphCopyPin,e.ctrlKey||e.metaKey);return;}
     const group=e.target.closest?.('[data-graph-group],[data-graph-group-select]');
     if(group&&['Enter',' '].includes(e.key)){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)selectGraphGroup(group.dataset.graphGroup||group.dataset.graphGroupSelect,e.ctrlKey||e.metaKey);return;}
     if(e.key==='F2'&&graphNetFocus.size===1&&!dialog.open&&!e.target.closest?.('input:not([readonly]),textarea,select,[contenteditable="true"]')){
-      const name=[...graphNetFocus][0],label=$$('[data-wire-name]',shell).find(x=>x.dataset.wireName===name);
-      if(label){e.preventDefault();e.stopImmediatePropagation();beginGraphLabelEdit(label);}
+      e.preventDefault();e.stopImmediatePropagation();editBranch('net',shell.querySelector('[data-branch-edit="net"]'));
     }
-    if(e.key==='Escape'&&!dialog.open&&graphActive()&&(graphObject||graphNetFocus.size||graphGroupFocus.size)&&!e.target.closest?.('input:not([readonly]),textarea,select,[contenteditable="true"]'))clearGraphNetFocus();
+    if(e.key==='Escape'&&!dialog.open&&graphActive()&&(graphObject||graphNetFocus.size||graphGroupFocus.size||graphPinSelection.size)&&!e.target.closest?.('input:not([readonly]),textarea,select,[contenteditable="true"]'))clearGraphNetFocus();
   },true);
+  let childSourceView=true;
+  function activeChildFile(){
+    if(currentView!=='diagram'||activeModule==='top')return null;
+    return window.WIUBundle.moduleFile(project,W.moduleOf(project,activeModule));
+  }
+  function renderChildSource(){
+    const file=activeChildFile(), child=currentView==='diagram'&&activeModule!=='top', raw=child&&childSourceView;
+    const panel=$('#rtlPanel'), pre=$('#r134-source-text');
+    panel.classList.toggle('r134-source-view',raw);
+    $('#r134-source-tabs').hidden=!child;
+    $('#r134-show-file').setAttribute('aria-pressed',String(raw));
+    $('#r134-show-ports').setAttribute('aria-pressed',String(!raw));
+    $('#r134-source-actions').hidden=!raw;
+    $('#r134-file-copy').disabled=$('#r134-file-download').disabled=!file;
+    $('#r134-header-download').hidden=!child||raw;
+    const text=raw?(file?.text||'沒有已保存的 RTL 來源檔。請先匯入子模組 RTL。'):'';
+    if(pre.textContent!==text)pre.textContent=text;
+    const name=$('#r134-source-name');if(name.textContent!==(file?.name||''))name.textContent=file?.name||'';
+  }
+  function downloadChildSource(){
+    window.WIUBridge?.finish();
+    const file=activeChildFile();if(!file){toast('沒有已保存的 RTL 來源檔。');return;}
+    download(file.name.split('/').pop(),file.text);
+  }
+  $('#r134-show-file').onclick=()=>{childSourceView=true;renderChildSource();};
+  $('#r134-show-ports').onclick=()=>{childSourceView=false;renderChildSource();};
+  $('#r134-file-download').onclick=downloadChildSource;
+  $('#r134-header-download').onclick=()=>{
+    window.WIUBridge.finish();if(currentView!=='diagram'||activeModule==='top')return;
+    if(window.WIUBridge.getPorts().issues.some(i=>i.severity==='error')){toast('請先修正介面宣告錯誤。');return;}
+    download(W.moduleOf(project,activeModule).name+'.interface.v',window.WIUBridge.rtl());
+  };
+  $('#r134-file-copy').onclick=async()=>{
+    window.WIUBridge?.finish();
+    renderChildSource();
+    const file=activeChildFile();if(!file)return;
+    try{await navigator.clipboard.writeText(file.text);toast('已複製完整 '+file.name);}
+    catch{const r=document.createRange();r.selectNodeContents($('#r134-source-text'));const selection=window.getSelection();selection.removeAllRanges();selection.addRange(r);toast('已選取完整檔案，請按 Ctrl+C 複製。');}
+  };
   function renderWorkbook(){
     if(!project.workbook)project=W.normalize(project);
     if(activeModule!=='top'&&!project.modules.some(m=>m.id===activeModule))activeModule='top';
@@ -567,6 +804,7 @@
     rail.hidden=!working||!design||!railOpen;renderRail();
     if(!$('#r124-name:focus',switchbar)&&!pendingField?.element?.matches('#r124-name'))switchbar.innerHTML=globalHeader();stagebar.hidden=!working;stagebar.innerHTML=stageNav();
     const m=W.moduleOf(project,activeModule);
+    renderChildSource();
     diagramBar.hidden=currentView!=='diagram'||activeModule==='top';
     document.body.classList.toggle('r107-rtl-owned',lockedStructure());
     if(!diagramBar.hidden){
@@ -632,7 +870,7 @@
     }catch(e){toast(e.message);refreshSheet();renderWorkbook();return {status:'rejected',message:e.message};}
     renderWorkbook();return {status:'accepted'};
   }
-  function refreshSheet(){if(currentView==='diagram'){const ui=window.WIUBridge?.uiSnapshot();diagramGuard=true;try{window.WIUBridge?.loadSheet(W.makeDiagram(project,activeModule));window.WIUBridge?.restoreUi(ui);}finally{diagramGuard=false;}}renderWorkbook();}
+  function refreshSheet(){if(currentView==='diagram'){const ui=window.WIUBridge?.uiSnapshot();diagramGuard=true;try{window.WIUBridge?.loadSheet(W.makeDiagram(project,activeModule));window.WIUBridge?.restoreUi(ui,{preserveEditView:true});}finally{diagramGuard=false;}}renderWorkbook();}
   function beginPractice(next,nextTab='lesson'){
     window.WIUBridge?.finish();if(!practiceReturn){if(dirty()||!draft)writeDraft();practiceReturn={project:A.clone(project),workspace:workspace(),past:past.slice(),future:future.slice(),saved,draft,downloadState:A.clone(downloadState)};}
     clearTimeout(saveTimer);sessionKind='practice';project=W.normalize(next);past=[];future=[];saved=JSON.stringify(project);draft=null;downloadState={};activeModule='top';graphStart='';graphConnectMode=project.workbook?.example!=='gen-top-complete';graphQuickConnect=false;practiceCoachExpanded=false;resetFilters();lessonTask='';focusedPin='';rtlOpen=false;dialog.close();view('assembly');tab=nextTab;render();focusStep();
@@ -745,7 +983,7 @@
       const expr=end.top?end.net.name:end.expr?.trim(),net=inspectedNet(end);
       const object={kind:'pin',id:key,projectId:project.workbook.projectId,net:net?.name||''};
       if(net)selectGraphNet(net.name,!!(event?.ctrlKey||event?.metaKey),object);
-      else{graphObject=object;graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();graphPinHint=end.label+' · '+(expr?'常數／運算式：'+expr:'尚未接線');applyGraphNetFocus();}
+      else{graphPinSelection.clear();graphObject=object;graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();graphPinHint=end.label+' · '+(expr?'常數／運算式：'+expr:'尚未接線');applyGraphNetFocus();}
       return;
     }
     clearGraphNetFocus();
@@ -769,7 +1007,10 @@
   function saveRecord(){const id=project.workbook?.projectId||'initial';if(!saveRecords.has(id))saveRecords.set(id,{draftStatus:'idle',draftAt:null,downloadAt:null,downloadName:null});return saveRecords.get(id);}
   function saveState(){for(const [key,d] of fieldDrafts)if(d.projectId!==project.workbook.projectId||!R119.dirtyField(d.element))fieldDrafts.delete(key);if(!pendingField||!fieldDrafts.has(pendingField.key))pendingField=[...fieldDrafts.values()].at(-1)||null;const r=saveRecord();return {...r,practice:sessionKind==='practice',changedSinceDownload:dirty(),pendingEdit:pendingField?{label:pendingField.label,value:pendingField.element?.value||''}:null};}
   function saveStatusText(state=saveState()){const parts=[];if(state.pendingEdit)parts.push('欄位待套用');parts.push(state.practice?'範例練習':state.draftStatus==='failed'?'草稿暫存失敗':state.draftStatus==='pending'?'草稿暫存中':state.draftStatus==='saved'&&state.draftAt?'草稿已暫存':'草稿尚未暫存');parts.push(state.downloadAt?(state.changedSinceDownload?'下載後有修改':'下載已送出'):(state.practice?'尚未另存':'尚未下載專案'));return parts.join(' · ');}
-  function refreshSaveStatus(state=saveState()){const status=$('.r118-save-status',switchbar);if(!status)return;status.textContent=saveStatusText(state);status.dataset.state=state.draftStatus==='failed'?'failed':state.pendingEdit?'editing':state.draftStatus||'idle';const detail=[];if(state.pendingEdit)detail.push(state.pendingEdit.label+'：Enter／Tab 套用，Esc 取消');if(state.draftStatus==='failed')detail.push('最新修改尚未成功暫存；請修正待套用欄位並下載專案保留修改');else if(state.draftStatus==='pending')detail.push('正在等待本機草稿寫入');if(state.draftAt)detail.push('上次成功暫存：'+state.draftAt);if(state.downloadAt)detail.push('專案下載已送出：'+state.downloadName+'（'+state.downloadAt+'）；請在裝置下載列表確認');else detail.push('本機草稿與下載專案分開保存');status.title=detail.join('\n');}
+  function refreshSaveStatus(state=saveState()){
+    const alert=$('.r134-save-alert',switchbar);
+    if(alert){const message=state.draftStatus==='failed'?'草稿暫存失敗':state.pendingEdit?'欄位待套用':state.practice?'範例練習':'';alert.hidden=!message;if(alert.textContent!==message)alert.textContent=message;}
+    const status=$('.r118-save-status',switchbar);if(!status)return;status.textContent=saveStatusText(state);status.dataset.state=state.draftStatus==='failed'?'failed':state.pendingEdit?'editing':state.draftStatus||'idle';const detail=[];if(state.pendingEdit)detail.push(state.pendingEdit.label+'：Enter／Tab 套用，Esc 取消');if(state.draftStatus==='failed')detail.push('最新修改尚未成功暫存；請修正待套用欄位並下載專案保留修改');else if(state.draftStatus==='pending')detail.push('正在等待本機草稿寫入');if(state.draftAt)detail.push('上次成功暫存：'+state.draftAt);if(state.downloadAt)detail.push('專案下載已送出：'+state.downloadName+'（'+state.downloadAt+'）；請在裝置下載列表確認');else detail.push('本機草稿與下載專案分開保存');status.title=detail.join('\n');}
   window.addEventListener('wiu-status-change',e=>refreshSaveStatus(e.detail||saveState()));
   function notifySaveState(){refreshSaveStatus();window.dispatchEvent(new CustomEvent('wiu-status-change',{detail:saveState()}));}
   function writeDraft(){if(sessionKind==='practice')return;const r=saveRecord();try{const ws=workspace(),previous=localStorage.getItem(key),old=previous?JSON.parse(previous):null;if(old&&JSON.stringify(old.project)===JSON.stringify(project)&&JSON.stringify(old.workspace)===JSON.stringify(ws)){r.draftStatus='saved';r.draftAt=old.at||r.draftAt;notifySaveState();return;}const at=new Date().toISOString();localStorage.setItem(key,JSON.stringify({project:window.WIUTopScene.withDrawingSnapshot(project),workspace:ws,at}));r.draftStatus='saved';r.draftAt=at;notifySaveState();}catch{r.draftStatus='failed';notifySaveState();toast('本機暫存失敗；請下載專案 JSON 保留已套用的修改。');}}
@@ -778,7 +1019,7 @@
   const historyIndex=list=>HF.historyEntry(list,historyScope())?.index??-1;
   const historyCan=list=>historyIndex(list)>=0;
   function historyState(){const describe=list=>{const item=HF.historyEntry(list,historyScope());if(!item)return null;const e=item.entry;return {label:e.label||'修改設計',scope:HF.scopeName(project,e.scope),scopeId:e.scope,at:e.at||null};};return {scope:HF.scopeName(project,historyScope()),scopeId:historyScope(),undo:describe(past),redo:describe(future)};}
-  function remember(before,options={}){const after=JSON.stringify(project);if(before===after)return;const old=JSON.parse(before),structural=old.workbook?.projectId!==project.workbook?.projectId||JSON.stringify(old.modules.map(m=>m.id))!==JSON.stringify(project.modules.map(m=>m.id)),scope=HF.actionScope(old,project,historyScope(),options.scope);past.push({scope,label:options.label||HF.historyLabel(old,project,scope),at:new Date().toISOString(),before,after,patch:window.WIUHistory.changes(old,project)});if(past.length>100)past.shift();future=scope==='project'?[]:future.filter(e=>e.scope!==scope&&e.scope!=='project');}
+  function remember(before,options={}){if(before===JSON.stringify(project))return;const old=JSON.parse(before),scope=HF.actionScope(old,project,historyScope(),options.scope);past.push({scope,label:options.label||HF.historyLabel(old,project,scope),at:new Date().toISOString(),patch:window.WIUHistory.changes(old,project)});if(past.length>100)past.shift();future=scope==='project'?[]:future.filter(e=>e.scope!==scope&&e.scope!=='project');}
   function openHistory(){const state=historyState(),rows=past.slice(-15).reverse();openDialog('復原與重做','<p>目前範圍：<b>'+esc(state.scope)+'</b>。跨模組操作標示「整個專案」；相依變更會保護原資料，不會強制覆蓋。</p><div class="a-actions"><button data-action="history-undo" '+(!state.undo?'disabled':'')+'>復原'+(state.undo?'：'+esc(state.undo.label):'')+'</button><button data-action="history-redo" '+(!state.redo?'disabled':'')+'>重做'+(state.redo?'：'+esc(state.redo.label):'')+'</button></div><ol class="r118-history-list">'+rows.map(e=>'<li><b>'+esc(e.label||'修改設計')+'</b><small>'+esc(HF.scopeName(project,e.scope))+(e.scope!==historyScope()&&e.scope!=='project'?' · 切換至該頁可復原':'')+'</small></li>').join('')+'</ol>'+(!rows.length?'<p>尚無已套用的修改。</p>':''));}
   function commit(fn,msg,historyOptions){
     const before=JSON.stringify(project),previous=JSON.parse(before);
@@ -805,8 +1046,8 @@
     }
     if(graphObject?.kind==='instance'&&!project.instances.some(i=>i.id===graphObject.id))graphObject=null;
   }
-  function undo(){saveState();if(pendingField){toast('目前正在輸入：Ctrl+Z 先復原文字；Enter 套用或 Esc 取消後再復原設計。');return;}const index=historyIndex(past);if(index<0)return;const entry=past[index];let next;try{next=window.WIUHistory.apply(project,entry,true);}catch(e){toast(e.message);return;}past.splice(index,1);future.push(entry);project=W.normalize(next);reconcileHistorySelection();reconcileHistoryView();stash();render();refreshSheet();showHistoryEffect(entry,true);toast('已復原：'+entry.label+'。');}
-  function redo(){saveState();if(pendingField){toast('請先 Enter 套用或 Esc 取消目前輸入，再重做設計。');return;}const index=historyIndex(future);if(index<0)return;const entry=future[index];let next;try{next=window.WIUHistory.apply(project,entry,false);}catch(e){toast(e.message);return;}future.splice(index,1);past.push(entry);project=W.normalize(next);reconcileHistorySelection();reconcileHistoryView();stash();render();refreshSheet();showHistoryEffect(entry,false);toast('已重做：'+entry.label+'。');}
+  function undo(){saveState();if(pendingField){toast('目前正在輸入：Ctrl+Z 先復原文字；Enter 套用或 Esc 取消後再復原設計。');return;}const index=historyIndex(past);if(index<0)return;const prior=project,entry=past[index];let next;try{next=window.WIUHistory.apply(project,entry,true);}catch(e){toast(e.message);return;}past.splice(index,1);future.push(entry);project=W.normalize(next);reconcileHistorySelection();reconcileHistoryView();stash();render();refreshSheet();showHistoryEffect(entry,prior);toast('已復原：'+entry.label+'。');}
+  function redo(){saveState();if(pendingField){toast('請先 Enter 套用或 Esc 取消目前輸入，再重做設計。');return;}const index=historyIndex(future);if(index<0)return;const prior=project,entry=future[index];let next;try{next=window.WIUHistory.apply(project,entry,false);}catch(e){toast(e.message);return;}future.splice(index,1);past.push(entry);project=W.normalize(next);reconcileHistorySelection();reconcileHistoryView();stash();render();refreshSheet();showHistoryEffect(entry,prior);toast('已重做：'+entry.label+'。');}
 
   function asciiJson(value){return JSON.stringify(value,null,2).replace(/[\u007f-\uffff]/g,ch=>'\\u'+ch.charCodeAt(0).toString(16).padStart(4,'0'));}
   function download(name,text,type='text/plain'){const bytes=typeof text==='string'?new TextEncoder().encode(text):text;recentDownload={name,data:text,type,bytes:bytes.byteLength??bytes.length??0,text:typeof text==='string'?text:/\.vbs$/i.test(name)&&text instanceof Uint8Array?new TextDecoder('utf-16le').decode(text.subarray(2)):null};const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);renderWorkbook();}
@@ -928,7 +1169,7 @@
       const preview=$('.a-code-preview',panel);if(preview)preview.open=!!previewOpen;exportSnapshot=snapshot;
     }
   }
-  const labels={graph:'Top 結構與接線',home:'首頁',start:'建立設計',setup:'建立設計',modules:'放入模組',lesson:'第一個 Top',bundle:'RTL 與外部工具工作包',connections:'接腳與連線',defines:'條件與位寬',ports:'Top 對外接腳',nets:'內部接線',assigns:'訊號運算',advanced:'進階 org',check:'檢查設計',export:'取得成果',sources:'來源檔案',help:'說明中心'};
+  const labels={groupGraph:'Group 接線圖',graph:'Top 結構與接線',home:'首頁',start:'建立設計',setup:'建立設計',modules:'放入模組',lesson:'第一個 Top',bundle:'RTL 與外部工具工作包',connections:'接腳與連線',defines:'條件與位寬',ports:'Top 對外接腳',nets:'內部接線',assigns:'訊號運算',advanced:'進階 org',check:'檢查設計',export:'取得成果',sources:'來源檔案',help:'說明中心'};
   function go(next){
     const back=tab==='connections'&&graphTableOrigin?.projectId===project.workbook.projectId?graphTableOrigin:null;
     if(tab==='connections'&&next!=='connections'){
@@ -986,9 +1227,10 @@
   function renderModules(){return project.modules.map(m=>'<div class="a-card fg-module-row"><div><strong class="a-mono">'+esc(m.name)+'<\/strong><small>'+m.ports.length+' 個接腳 · 已放入 '+project.instances.filter(i=>i.module===m.name).length+' 份'+(m.placeholder?' · 暫代介面':'')+'<\/small><\/div><div class="a-actions"><button data-action="flow-instances" data-id="'+esc(m.name)+'">增加份數<\/button><button data-action="module-view" data-id="'+esc(m.name)+'">查看介面<\/button><details><summary>更多<\/summary><button data-action="instance-add" data-id="'+esc(m.name)+'">加入並自訂名稱<\/button><button data-action="module-delete" data-id="'+esc(m.name)+'">移除定義<\/button><\/details><\/div><\/div>').join('')||'<div class="a-empty-small">匯入後，這裡會列出可用的模組。<\/div>';}
   function renderInstances(){return project.instances.map(i=>'<div class="a-card"><strong class="a-mono">'+esc(i.name)+'<\/strong><small>'+esc(i.module)+'<\/small><div class="a-actions"><button data-action="instance-filter" data-id="'+esc(i.id)+'">連線<\/button><button data-action="instance-edit" data-id="'+esc(i.id)+'">設定<\/button><button data-action="instance-delete" data-id="'+esc(i.id)+'" aria-label="刪除 '+esc(i.name)+'">✕<\/button><\/div><\/div>').join('')||'<div class="a-empty-small">匯入後，按「加入 instance」建立實際子模組。<\/div>';}
   function renderPanel(rows,all){
+    if(tab==='groupGraph')return renderGroupPanel();
     if(tab==='graph'){
       const scene=backgroundScene();
-      return backgroundStatus(scene)+V.graph(project,graphStart,{scene,viewport:graphWindow(scene),artwork:graphArtwork,focus:graphFocus,groups:graphGroupPanel,connectMode:graphConnectMode});
+      return V.graph(project,graphStart,{scene,routingStatus:backgroundStatus(scene),viewport:graphWindow(scene),artwork:graphArtwork,focus:graphFocus,groups:graphGroupPanel,connectMode:graphConnectMode});
     }
     if(tab==='setup')return flowUI.start();
     if(tab==='modules')return renderModuleWorkspace();
@@ -1008,7 +1250,7 @@
   function renderOrphans(){const keys=new Set(A.pinRows(project).map(r=>r.key));const lost=project.connections.filter(c=>!keys.has(c.instance+'::'+c.port));return lost.length?'<div class="a-note a-warn"><b>'+lost.length+' 個既有綁定找不到有效 pin<\/b><p>可能由 define 切換造成。先確認組態；也可以明確移除下面不再需要的綁定。<\/p>'+lost.map(c=>'<div class="a-include-row"><code>'+esc((project.instances.find(i=>i.id===c.instance)?.name||c.instance)+'.'+c.port+' → '+(c.expr||'刻意不接 NC'))+'<\/code><button data-action="orphan-remove" data-id="'+esc(c.id)+'">移除綁定…<\/button><\/div>').join('')+'<\/div>':'';}
   function connectionScopeSummary(rows,shown){const instance=project.instances.find(i=>i.id===instanceFilter),parts=[instance?'Instance：'+instance.name:'全部 instances'],visible=new Set(shown.map(r=>r.key)),valid=new Set(rows.map(r=>r.key)),count=[...selected].filter(k=>valid.has(k)).length,hidden=[...selected].filter(k=>valid.has(k)&&!visible.has(k)).length;if(graphTableOrigin?.pinKey)parts.push('指定 pin：'+graphTableOrigin.pinKey.split('::')[1]);if(filter)parts.push('搜尋：'+filter);if(onlyUnbound)parts.push('只看未設定');return '<div class="r118-connection-scope" role="status"><span>'+esc(parts.join(' · '))+'</span><b>顯示 '+shown.length+' / '+rows.length+' pins</b><span>已選 '+count+' 個'+(hidden?'（'+hidden+' 個在篩選外）':'')+'</span>'+((filter||onlyUnbound||instanceFilter||graphTableOrigin?.pinKey)?'<button data-action="clear-filters">顯示全部</button>':'')+(hidden?'<button data-action="clear-hidden-selection">清除篩選外選取</button>':'')+(count?'<button data-action="clear-selection">清除選取</button>':'')+'</div>';}
   function renderConnections(rows){
-    const back='<nav class="r119-view-tabs r120-top-tabs r121-connection-tabs" aria-label="Top 工作檢視"><button type="button" data-action="wb-open" data-id="top">Top I/O</button><button type="button" data-action="wb-graph">接線圖</button><button type="button" data-action="graph-table" aria-current="page">接線表</button></nav>';
+    const back='<nav class="r119-view-tabs r120-top-tabs r121-connection-tabs" aria-label="Top 工作檢視"><button type="button" data-action="wb-open" data-id="top">Top I/O</button><button type="button" data-action="wb-graph">接線圖</button><button type="button" data-action="group-view">Group 接線圖</button><button type="button" data-action="graph-table" aria-current="page">接線表</button></nav>';
     if(!project.instances.length)return back+E.heading('03 / CONNECTIONS','先放入要接線的模組','匯入 RTL 或定義子模組介面後，就能設定每個接腳。','<button class="a-primary" data-tab="modules">放入模組 →<\/button>');
     const heading=back+E.heading('Top 接線','接腳與連線',connectionView==='table'?'直接編輯綁定，或選取多個接腳批次處理。':'選取接腳，設定右側的接線方式。');
     const modes='<div class="ux-connection-view a-toolbar" aria-label="接線顯示方式"><div class="ux-segmented"><button data-action="ux-connection-view" data-kind="cards" aria-pressed="'+(connectionView==='cards')+'">逐一接線<\/button><button data-action="ux-connection-view" data-kind="table" aria-pressed="'+(connectionView==='table')+'">表格／批次<\/button><\/div><button data-action="suggest">建議同名接線<\/button><button data-action="paste-connections">貼上接線表</button><button data-action="group-match">群組配對</button><details class="fg-related-tools"><summary>接腳與線的宣告<\/summary><button data-tab="ports">Top 對外接腳<\/button><button data-tab="nets">內部接線<\/button><button data-tab="assigns">訊號運算<\/button><button data-tab="defines">Defines<\/button><\/details><\/div>';
@@ -1038,14 +1280,40 @@
     const shown=rows.filter(r=>(!graphTableOrigin?.pinKey||r.key===graphTableOrigin.pinKey)&&(!instanceFilter||r.instance===instanceFilter)&&(!onlyUnbound||r.expr==null)&&(!filter||searchable(r).includes(filter.toLowerCase())));
     return connectionScopeSummary(rows,shown)+'<p class="a-hint">每列依 Instance → Group → Pin 對照兩端；Group「—」表示未分組。目的欄列出同一 net 的驅動／接收端；assign 與切片保留運算式。不用的 pin 請選「刻意不接」，org 會明寫 conn ""；「未設定」仍需處理。可勾選多個接腳批次處理。<\/p><div class="a-toolbar"><input id="a-filter" placeholder="搜尋 instance、group、pin 或目的端…" value="'+esc(filter)+'" aria-label="搜尋連線"><select id="a-instance-filter" aria-label="依 instance 篩選"><option value="">全部 instances<\/option>'+project.instances.map(i=>'<option value="'+esc(i.id)+'" '+(i.id===instanceFilter?'selected':'')+'>'+esc(i.name)+'<\/option>').join('')+'<\/select><label><input type="checkbox" id="a-unbound" '+(onlyUnbound?'checked':'')+'> 只看未設定<\/label><button data-action="clear-filters">清除篩選<\/button><\/div><div class="a-toolbar r69-batch"><span>'+selected.size+' 個已選取<\/span><button data-action="batch-net" '+(!selected.size?'disabled':'')+'>接到 net／新建 net<\/button><button data-action="batch-slices" '+(!selected.size?'disabled':'')+'>切片分配<\/button><button data-action="batch-expose" '+(!selected.size?'disabled':'')+'>提升為 Top ports<\/button><button data-action="batch-tie" '+(!selected.size?'disabled':'')+'>常數<\/button><button data-action="batch-open" '+(!selected.size?'disabled':'')+'>刻意不接 NC<\/button><button data-action="batch-unset" '+(!selected.size?'disabled':'')+'>清除設定<\/button><\/div><div class="a-tablebox"><table class="a-table r132-review-table"><thead><tr><th><input type="checkbox" id="a-select-all" aria-label="選取目前顯示 pins" '+(shown.length&&shown.every(r=>selected.has(r.key))?'checked':'')+'><\/th><th>Instance / Group / Pin<\/th><th>方向<\/th><th>位寬<\/th><th>連到 Instance / Group / Pin<\/th><th>狀態<\/th><th>操作<\/th><\/tr><\/thead><tbody>'+shown.map(r=>'<tr data-row-key="'+esc(r.key)+'"><td><input type="checkbox" data-pin-select="'+esc(r.key)+'" '+(selected.has(r.key)?'checked':'')+' aria-label="選取 '+esc(r.instanceName+'.'+r.port.name)+'"><\/td><td>'+NR.endpointHTML(review.byKey.get(r.key))+'<\/td><td>'+badge(r.port.direction.toUpperCase())+'<\/td><td><span class="a-mono">'+esc(pinRange(r))+'<\/span><\/td><td><div class="r132-destinations">'+NR.destinationHTML(review.byKey.get(r.key),review.peers(r.key))+'</div><div class="r119-binding"><select class="r118-binding-mode" data-binding-mode="'+esc(r.key)+'" aria-label="'+esc(r.instanceName+'.'+r.port.name)+' 綁定狀態">'+[['unset','未設定'],['net','接線／運算式'],...(r.port.direction==='output'?[]:[['constant','常數']]),['open','刻意不接']].map(([value,label])=>'<option value="'+value+'" '+(HF.bindingKind(r.expr)===value?'selected':'')+'>'+label+'</option>').join('')+'</select><input class="a-expr" data-connection="'+esc(r.key)+'" value="'+esc(r.expr??'')+'" placeholder="'+(r.expr===''?'刻意不接：.pin()':'輸入 net／運算式；空白＝未設定')+'" list="a-net-list" spellcheck="false" aria-label="'+esc(r.instanceName+'.'+r.port.name)+' 連線"><small data-r118-edit-status role="status">'+''+'</small></div><\/td><td>'+pinStatus(r)+'<\/td><td><button data-action="pin-connect" data-id="'+esc(r.key)+'">設定接線…<\/button><\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>'+(!shown.length?'<div class="a-note">'+(rows.length?'沒有符合篩選的 pins。':'此 instance 沒有可用的接腳；請先核對子模組 RTL。')+' <button data-action="clear-filters">顯示全部<\/button><\/div>':'')+'<datalist id="a-net-list">'+project.nets.map(n=>'<option value="'+esc(n.name)+'">'+esc(n.direction+' '+n.range)+'<\/option>').join('')+'<\/datalist><p class="a-hint">顯示 '+shown.length+' / '+rows.length+' pins。清空輸入並套用會回到「未設定」；選擇「刻意不接」才會輸出 .pin()。<\/p>';
   }
-  function topContext(){const raw=C.projectView(project).parameters||[],defs=Array.isArray(raw)?raw:Object.entries(raw).map(([name,value])=>({name,value:String(value)}));return C.resolveParameters({parameters:defs},{}).context;}
-  function pinRange(row){try{const pv=C.projectView(project),inst=pv.instances.find(i=>i.id===row.instance),m=pv.modules.find(m=>m.name===inst.module),ctx=C.resolveParameters(m,inst.parameters,topContext()).context;const r=C.parseRange(C.expandDefines(row.port.range,project),ctx);return (row.port.range||'1 bit')+(r.width>1?' · '+r.width+' bits':'');}catch{return row.port.range||'1 bit';}}
-  function effectiveRange(row){const pv=C.projectView(project),inst=pv.instances.find(i=>i.id===row.instance),m=pv.modules.find(m=>m.name===inst.module),ctx=C.resolveParameters(m,inst.parameters,topContext()).context;const r=C.parseRange(C.expandDefines(row.port.range,project),ctx);return r.width===1?'':'['+r.msb+':'+r.lsb+']';}
+  let rangeView;
+  function widthView(){
+    if(rangeView?.project===project)return rangeView;
+    const effective=C.projectView(project),raw=effective.parameters||[];
+    const defs=Array.isArray(raw)?raw:Object.entries(raw).map(([name,value])=>({name,value:String(value)}));
+    const top=C.resolveParameters({parameters:defs},{}).context;
+    const modules=new Map(effective.modules.map(m=>[m.name,m])),instances=new Map();
+    for(const inst of effective.instances){
+      const m=modules.get(inst.module);if(!m)continue;
+      instances.set(inst.id,{ports:new Map(m.ports.map(p=>[p.name,p.range])),
+        context:C.resolveParameters(m,inst.parameters,top).context});
+    }
+    rangeView={project,top,instances,ranges:new Map()};
+    return rangeView;
+  }
+  function topContext(){return widthView().top;}
+  function resolvedPinRange(row){
+    const view=widthView();
+    if(!view.ranges.has(row.key)){
+      const inst=view.instances.get(row.instance);
+      view.ranges.set(row.key,C.parseRange(inst.ports.get(row.port.name),inst.context));
+    }
+    return view.ranges.get(row.key);
+  }
+  function pinRange(row){try{const r=resolvedPinRange(row);return (row.port.range||'1 bit')+(r.width>1?' · '+r.width+' bits':'');}catch{return row.port.range||'1 bit';}}
+  function effectiveRange(row){const r=resolvedPinRange(row);return r.width===1?'':'['+r.msb+':'+r.lsb+']';}
   function renderNets(top){const nets=project.nets.filter(n=>top?n.direction!=='wire':n.direction==='wire');return '<h2>'+(top?'Top ports · 最上層對外介面':'內部 nets · 中間接線')+'<\/h2><p class="a-lead">'+(top?'名稱、方向與位寬決定最外層介面。範圍可填 [`DATA_W-1:0]，使用 Defines 中的數值巨集。':'把中間線命名並明確宣告。可用 [63:0] 切片，位寬也可填 [`DATA_W-1:0]，macro 在 Defines 設定。')+'<\/p><div class="a-toolbar"><button class="a-primary" data-action="net-add" data-kind="'+(top?'input':'wire')+'">＋ '+(top?'新增 Top port':'新增內部 net')+'<\/button>'+(!top?'<span class="a-hint">驅動／接收數是端點數；切片重疊由檢查器判定。<\/span>':'<button data-action="flow-top-interface">批次貼上 Top 介面<\/button><button data-action="flow-parameters">Top 參數<\/button>')+'<\/div><div class="a-tablebox"><table class="a-table"><thead><tr><th>名稱<\/th><th>方向<\/th><th>範圍<\/th><th>Signed<\/th><th>群組 / 備註<\/th><th>驅動 / 接收<\/th><th><\/th><\/tr><\/thead><tbody>'+nets.map(n=>{const u=A.netUsage(project,n.name);return '<tr><td><input class="a-name" data-net="'+esc(n.id)+'" data-field="name" value="'+esc(n.name)+'" aria-label="Net 名稱"><\/td><td><select data-net="'+esc(n.id)+'" data-field="direction" aria-label="Net 方向">'+['wire','input','output','inout'].map(d=>'<option '+(d===n.direction?'selected':'')+'>'+d+'<\/option>').join('')+'<\/select><\/td><td><input class="a-range" data-net="'+esc(n.id)+'" data-field="range" value="'+esc(n.range)+'" placeholder="純量或 [7:0]" aria-label="Net 範圍"><\/td><td><input type="checkbox" data-net="'+esc(n.id)+'" data-field="signed" '+(n.signed?'checked':'')+' aria-label="Signed"><\/td><td><input data-net="'+esc(n.id)+'" data-field="group" value="'+esc(n.group||'')+'" placeholder="群組" aria-label="Net 群組"><input data-net="'+esc(n.id)+'" data-field="comment" value="'+esc(n.comment||'')+'" placeholder="備註" aria-label="Net 備註"><\/td><td>'+u.drivers+' / '+u.sinks+' <button data-action="net-inspect" data-id="'+esc(n.id)+'">查看<\/button><\/td><td><button data-action="net-delete" data-id="'+esc(n.id)+'">移除<\/button><\/td><\/tr>';}).join('')+'<\/tbody><\/table><\/div>'+(!nets.length?'<div class="a-note">尚未建立'+(top?'對外 port。可在連線表選取 pins，按「提升為 Top ports」。':'內部 net。可在連線表選取要相接的 pins，按「接到 net／新建 net」。')+'<\/div>':'');}
   function renderAdvanced(){return '<h2>進階 org · 保留公司功能<\/h2><p class="a-lead">WIU 能理解的接線由結構化資料生成；尚未解析的指令保留在這裡。保留原文不代表 WIU 已驗證它的作用。<\/p><div class="a-note a-warn">啟用不透明進階語法後，完整 Verilog 匯出會暫停，避免兩種輸出產生不同硬體。可明確下載帶原文的 org 候選檔，再交由公司 gen_top 驗證。<\/div><h3>gen_top format<\/h3><p class="a-hint">匯出使用原始範例的五個基本選項；有大寫接腳時保留 case_sensitive。其他項目影響公司工具輸出，不保證 WIU 的文字排版相同。<\/p><div class="a-advanced-formats">'+C.FORMAT_OPTIONS.map(f=>'<label><input type="checkbox" data-format="'+f+'" '+(project.formats.includes(f)||['commented_inst_pin','commented_port','constraint_port_order','keep_inst_port_order','disable_unconstraint_port'].includes(f)?'checked':'')+' '+(['commented_inst_pin','commented_port','constraint_port_order','keep_inst_port_order','disable_unconstraint_port'].includes(f)?'disabled':'')+'> <span class="a-mono">'+f+'<\/span><\/label>').join('')+'<\/div><label>未解析／手寫 realtek 指令<textarea id="a-advanced" spellcheck="false" placeholder="例如 empty、empty_out、empty_port 或 c_code。原文保留，不在瀏覽器執行。">'+esc(project.advanced)+'<\/textarea><\/label><label>其他手寫前置內容<textarea id="a-prelude" spellcheck="false" placeholder="未建模的原始文字，請勿當作已驗證的 Verilog。">'+esc(project.prelude)+'<\/textarea><\/label><p class="a-hint">完整支援清單與命令列選項請見 README。<\/p>'+(project.originalOrg?'<button data-action="original-org">下載匯入時的原始 org<\/button>':'');}
+  function exportPreview(target){
+    return target==='org'?K.org(project,{allowErrors:true,allowRaw:true}):K.verilog(project,{allowErrors:true});
+  }
   function renderExport(all){
     const verilogErrors=issues('verilog').filter(i=>i.severity==='error'),target=exportTab==='org'?'org':'verilog';
-    let code='';try{code=target==='verilog'?C.renderVerilog(project):C.renderOrg(project,{allowRaw:true});}catch(e){code='// 無法建立預覽：'+e.message;}
+    let code='';try{code=exportPreview(target);}catch(e){code='// 無法建立預覽：'+e.message;}
     const ready=!verilogErrors.length&&project.instances.length>0;
     return E.heading('05 / DELIVERY','取得你的設計成果','選擇這次要交付的成果，設計仍可隨時返回修改。')+E.deliveryChoices('rtl')+
       '<section class="ux-rtl-delivery"><span class="ux-kicker">VERILOG TOP<\/span><h3>'+esc(filename())+'.v<\/h3><p>此檔案是目前組態的 Top 接線，編譯時需一併提供子模組 RTL 與相同 Defines。<\/p>'+
@@ -1142,11 +1410,11 @@
     openDialog('批次分配 bus 切片','<div class="r119-grid3"><label>Bus 名稱<input id="a-slice-name" value="data_bus"></label><label>起始 bit<input id="a-slice-start" type="number" min="0" value="0"></label><label>分配方向<select id="r119-slice-direction"><option value="up">由低位往高位</option><option value="down">由高位往低位</option></select></label></div><p>可調整接腳順序。依有效位寬連續分配，下一步核對每筆切片與宣告範圍。</p><div id="r119-slice-order"></div>','預覽切片',()=>{const plan=R119.slices(project,order,{name:$('#a-slice-name',dialog).value.trim(),start:Number($('#a-slice-start',dialog).value),direction:$('#r119-slice-direction',dialog).value});changePlan('核對切片順序與範圍',plan.changes,plan.nets);});
     function draw(){const host=$('#r119-slice-order',dialog);host.innerHTML=order.map((key,n)=>{const row=rows.find(r=>r.key===key);return '<div class="r119-preview-order"><code>'+esc(row.instanceName+'.'+row.port.name)+'</code><span>'+esc(pinRange(row))+'</span><button type="button" data-r119-up="'+n+'" '+(!n?'disabled':'')+' aria-label="上移 '+esc(row.port.name)+'">↑</button><button type="button" data-r119-down="'+n+'" '+(n===order.length-1?'disabled':'')+' aria-label="下移 '+esc(row.port.name)+'">↓</button></div>';}).join('');host.querySelectorAll('button').forEach(b=>b.onclick=()=>{const n=Number(b.dataset.r119Up??b.dataset.r119Down),to=n+(b.dataset.r119Up!==undefined?-1:1);[order[n],order[to]]=[order[to],order[n]];draw();});}draw();
   }
-  function saveProject(){if(dialog.open){const message='尚未送出專案下載：請先套用或關閉目前視窗，再按 Ctrl+S。';const error=$('#a-dialog-error',dialog);if(error){error.textContent=message;error.hidden=false;}else toast(message);return false;}document.activeElement?.blur();saveState();if(pendingField&&!pendingField.element.isConnected){tab=pendingField.tab;view(pendingField.currentView);render();}if(pendingField?.element?.id==='r124-name'){toast('名稱尚未套用；請修正紅色欄位，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(pendingField?.element?.dataset.wireName){toast('線名尚未套用；請修正後按 Enter，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(pendingField){toast('尚未儲存：請先修正紅色欄位，或按 Esc 取消。');pendingField.element?.focus({preventScroll:true});return false;}if(window.WIUBridge?.prepareSave?.()===false)return false;const data=workbookSnapshot(),name=(sessionKind==='practice'?'practice-':'')+filename()+'.wiu.json';download(name,asciiJson(data),'application/json');saved=JSON.stringify(project);downloadState.project=saved;Object.assign(saveRecord(),{downloadAt:new Date().toISOString(),downloadName:name});render();notifySaveState();toast('專案下載已送出：'+name+'。請在裝置下載列表確認；本機草稿與下載檔分開保存。');return true;}
-  function topViewTabs(active){return '<nav class="r119-view-tabs" aria-label="Top 檢視"><button data-action="wb-open" data-id="top" '+(active==='io'?'aria-current="page"':'')+'>Top I/O</button><button data-action="wb-graph" '+(active==='graph'?'aria-current="page"':'')+'>接線圖</button><button data-action="graph-table" '+(active==='table'?'aria-current="page"':'')+'>接線表</button></nav>';}
+  function saveProject(){if(branchEditor&&!branchEditor.finish())return false;if(dialog.open){const message='尚未送出專案下載：請先套用或關閉目前視窗，再按 Ctrl+S。';const error=$('#a-dialog-error',dialog);if(error){error.textContent=message;error.hidden=false;}else toast(message);return false;}document.activeElement?.blur();saveState();if(pendingField&&!pendingField.element.isConnected){tab=pendingField.tab;view(pendingField.currentView);render();}if(pendingField?.element?.id==='r124-name'){toast('名稱尚未套用；請修正紅色欄位，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(pendingField?.element?.dataset.wireName){toast('線名尚未套用；請修正後按 Enter，或 Esc 取消，再儲存專案。');pendingField.element.focus({preventScroll:true});return false;}if(pendingField){toast('尚未儲存：請先修正紅色欄位，或按 Esc 取消。');pendingField.element?.focus({preventScroll:true});return false;}if(window.WIUBridge?.prepareSave?.()===false)return false;const data=workbookSnapshot(),name=(sessionKind==='practice'?'practice-':'')+filename()+'.wiu.json';download(name,asciiJson(data),'application/json');saved=JSON.stringify(project);downloadState.project=saved;Object.assign(saveRecord(),{downloadAt:new Date().toISOString(),downloadName:name});render();notifySaveState();toast('專案下載已送出：'+name+'。請在裝置下載列表確認；本機草稿與下載檔分開保存。');return true;}
+  function topViewTabs(active){return '<nav class="r119-view-tabs" aria-label="Top 檢視"><button data-action="wb-open" data-id="top" '+(active==='io'?'aria-current="page"':'')+'>Top I/O</button><button data-action="wb-graph" '+(active==='graph'?'aria-current="page"':'')+'>接線圖</button><button data-action="group-view" '+(active==='groupGraph'?'aria-current="page"':'')+'>Group 接線圖</button><button data-action="graph-table" '+(active==='table'?'aria-current="page"':'')+'>接線表</button></nav>';}
   function reconcileHistorySelection(){const valid=new Set(A.pinRows(project).map(r=>r.key));selected=new Set([...selected].filter(k=>valid.has(k)));if(!valid.has(focusedPin))focusedPin='';}
-  function showHistoryEffect(entry,reverse){
-    const a=JSON.parse(reverse?entry.after:entry.before),b=project;
+  function showHistoryEffect(entry,a){
+    const b=project;
     const changed=b.instances.filter(i=>JSON.stringify(i)!==JSON.stringify(a.instances.find(x=>x.id===i.id))),bindings=b.connections.filter(c=>JSON.stringify(c)!==JSON.stringify(a.connections.find(x=>x.id===c.id)));
     lastHistoryEffect={label:entry.label,instances:changed.map(i=>i.id),keys:bindings.map(c=>c.instance+'::'+c.port)};
     for(const el of $$('[data-row-key],[data-graph-drag],[data-action="ux-pin"]',shell)){const id=el.dataset.rowKey||el.dataset.id||el.dataset.graphDrag;if(lastHistoryEffect.instances.includes(id)||lastHistoryEffect.keys.includes(id)){el.classList.add('r119-history-feedback');setTimeout(()=>el.classList.remove('r119-history-feedback'),2500);}}
@@ -1213,7 +1481,7 @@
       for(const b of moving){while(placed.some(o=>x<o.x+o.width+90&&x+b.width+90>o.x&&y<o.y+o.height+90&&y+b.height+90>o.y)){y=Math.max(...placed.filter(o=>x<o.x+o.width+90&&x+b.width+90>o.x&&y<o.y+o.height+90&&y+b.height+90>o.y).map(o=>o.y+o.height+100));}Ly.move(next,b.instance.id,x,y);placed.push({...b,x,y});y+=b.height+110;}
       const after=G.create(next,{fast:true}),moved=after.placed.filter(b=>{const old=scene.placed.find(x=>x.instance.id===b.instance.id);return old.x!==b.x||old.y!==b.y;});
       if(fixed.some(b=>{const n=after.placed.find(x=>x.instance.id===b.instance.id);return n.x!==b.x||n.y!==b.y;}))throw Error('局部排列會影響其他 Block，未套用。');
-      const img=s=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(G.svg(s));openDialog('核對局部排列','<p>將移動 '+moved.length+' 顆 Block，未選取／鎖定的 '+fixed.length+' 顆保持位置。</p><div class="r118-layout-compare"><figure><figcaption>目前</figcaption><img src="'+img(scene)+'"></figure><figure><figcaption>預覽</figcaption><img src="'+img(after)+'"></figure></div>','套用局部排列',()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>{project=next;},'已套用局部排列。',{scope:'top',label:'整理指定 Block'});dialog.close();});
+      const img=s=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(G.svg(G.layoutThumbnail(s)));openDialog('核對局部排列','<p>將移動 '+moved.length+' 顆 Block，未選取／鎖定的 '+fixed.length+' 顆保持位置。</p><div class="r118-layout-compare"><figure><figcaption>目前</figcaption><img src="'+img(scene)+'"></figure><figure><figcaption>預覽</figcaption><img src="'+img(after)+'"></figure></div>','套用局部排列',()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>{project=next;},'已套用局部排列。',{scope:'top',label:'整理指定 Block'});dialog.close();});
     });$('#r119-layout-all',dialog).onclick=()=>$$('[data-r119-layout]:not(:disabled)',dialog).forEach(el=>el.checked=true);
   }
   let recentDownload=null;
@@ -1349,7 +1617,7 @@
         commit(()=>removeGraphInstance(id),'已移除 '+i.name+' 與相關接線，可按 Ctrl+Z 復原。');
       });
     },
-    'module-view':b=>{const m=project.modules.find(m=>m.name===b.dataset.id);openDialog('Module / '+m.name,'<div class="a-tablebox"><table class="a-table"><thead><tr><th>PORT<\/th><th>方向<\/th><th>範圍<\/th><\/tr><\/thead><tbody>'+m.ports.map(p=>'<tr><td>'+esc(p.name)+'<\/td><td>'+esc(p.direction)+'<\/td><td>'+esc(p.range||'1 bit')+'<\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>'+issueList(m.issues||[])+'<pre>'+esc(m.source||'示範模型；未附原始 RTL')+'<\/pre>');},
+    'module-view':b=>{const m=project.modules.find(m=>m.name===b.dataset.id);openDialog('Module / '+m.name,'<div class="a-tablebox"><table class="a-table"><thead><tr><th>PORT<\/th><th>方向<\/th><th>範圍<\/th><\/tr><\/thead><tbody>'+m.ports.map(p=>'<tr><td>'+esc(p.name)+'<\/td><td>'+esc(p.direction)+'<\/td><td>'+esc(p.range||'1 bit')+'<\/td><\/tr>').join('')+'<\/tbody><\/table><\/div>'+issueList(m.issues||[])+'<pre>'+esc(window.WIUBundle.moduleFile(project,m)?.text||'沒有已保存的 RTL 來源檔。')+'<\/pre>');},
     'net-add':b=>newNetForm(b.dataset.kind),'batch-net':()=>newNetForm('wire',selected),'pin-net':b=>newNetForm('wire',new Set([b.dataset.id])),
     'net-delete':b=>{const plan=A.planRemoveNets(project,[b.dataset.id]),before=JSON.stringify(project);if(plan.blockers.length)throw Error(plan.blockers.join('\n'));confirmAction('刪除宣告與相關設定？',removalBody(plan),'刪除並清理相關設定',()=>{if(JSON.stringify(project)!==before)throw Error('專案已變更，請重新預覽。');commit(()=>A.removeNets(project,plan.ids),undefined,{scope:'top',label:'刪除 '+plan.nets.length+' 個接腳及相關設定'});});},
     'net-inspect':b=>{const n=project.nets.find(n=>n.id===b.dataset.id),rows=A.pinRows(project).filter(r=>r.expr&&new RegExp('(^|[^A-Za-z0-9_$])'+n.name.replace(/[$]/g,'\\$&')+'([^A-Za-z0-9_$]|$)').test(r.expr));openDialog(n.name+' · 連線端點','<p><code>'+esc(n.direction+' '+n.range+' '+n.name)+'<\/code><\/p>'+rows.map(r=>'<div class="a-card"><b>'+esc(r.instanceName+'.'+r.port.name)+'<\/b> '+badge(r.port.direction)+' → <code>'+esc(r.expr)+'<\/code><\/div>').join('')+'<p>Assign：'+esc(project.assigns.filter(a=>(a.target+' '+a.expr).includes(n.name)).map(a=>a.target+' = '+a.expr).join('; ')||'無')+'<\/p>');},
@@ -1364,8 +1632,8 @@
     'export-mode':b=>{if(b.dataset.kind==='defines'){go('defines');return;}exportTab=b.dataset.kind==='org'?'org':'verilog';render();const preview=$('.a-code-preview',shell);if(preview)preview.open=true;},
     'download-output':b=>{const target=b?.dataset.kind||exportTab;if(target==='defines'){defineUI.actions['defines-download']();downloadState.defines=JSON.stringify(project);render();return;}const t=target==='verilog'?K.verilog(project):K.org(project);download(filename()+(target==='verilog'?'.v':'.v.org'),t);downloadState[target]=JSON.stringify(project);render();toast('已送出下載。請一併保存 .wiu.json，方便下次繼續編輯。');},
     'first-error':()=>{const issue=issues(exportTab).find(i=>i.severity==='error');if(issue?.ref)actions['issue-locate']({dataset:{ref:JSON.stringify(issue.ref)}});},
-    'download-raw':()=>confirmAction('匯出含進階原文的 org','<p>此檔案可能包含 WIU 未解析的 empty、C code、條件或其他語法，無法保證與直接 Verilog 相同。請在公司環境檢查 gen_top 日誌與產出的 RTL。<\/p>','下載未驗證候選檔',()=>download(filename()+'.candidate.v.org',C.exportOrg(project,{allowRaw:true}))),
-    'copy-output':async()=>{const t=exportTab==='verilog'?C.renderVerilog(project):C.renderOrg(project,{allowRaw:true});try{await navigator.clipboard.writeText(t);toast('已複製預覽。');}catch{const range=document.createRange();range.selectNodeContents($('.a-code',shell));const s=window.getSelection();s.removeAllRanges();s.addRange(range);toast('已選取預覽，請按 Ctrl+C 複製。');}},
+    'download-raw':()=>confirmAction('匯出含進階原文的 org','<p>此檔案可能包含 WIU 未解析的 empty、C code、條件或其他語法，無法保證與直接 Verilog 相同。請在公司環境檢查 gen_top 日誌與產出的 RTL。<\/p>','下載未驗證候選檔',()=>download(filename()+'.candidate.v.org',K.org(project,{allowRaw:true}))),
+    'copy-output':async()=>{const t=exportPreview(exportTab);try{await navigator.clipboard.writeText(t);toast('已複製預覽。');}catch{const range=document.createRange();range.selectNodeContents($('.a-code',shell));const s=window.getSelection();s.removeAllRanges();s.addRange(range);toast('已選取預覽，請按 Ctrl+C 複製。');}},
     'original-org':()=>download(filename()+'.original.v.org',project.originalOrg),
     'issue-locate':b=>{if(b.dataset.issueKey)issueQueueKey=b.dataset.issueKey;issueQueueOpen=true;const ref=JSON.parse(b.dataset.ref);let selector='';if(ref.type==='defines'){tab='defines';}else if(ref.type==='net'){const n=project.nets.find(n=>n.id===ref.id);tab=n?.direction==='wire'?'nets':'ports';selector='[data-net="'+CSS.escape(ref.id)+'"]'+(ref.field?'[data-field="'+CSS.escape(ref.field)+'"]':'');}else if(ref.type==='connection'){connectionView='table';const c=project.connections.find(c=>c.id===ref.id);tab='connections';filter='';onlyUnbound=false;instanceFilter=c?.instance||'';selector=c?'[data-connection="'+CSS.escape(c.instance+'::'+c.port)+'"]':'';}else if(ref.type==='instance'){connectionView='table';tab='connections';filter='';onlyUnbound=false;instanceFilter=ref.id;const row=A.pinRows(project).find(r=>r.instance===ref.id&&(ref.port?r.port.name===ref.port:r.expr==null));if(row)selector='[data-connection="'+CSS.escape(row.key)+'"]';}else if(ref.type==='assign'){tab='assigns';selector='[data-assign="'+CSS.escape(ref.id)+'"]';}else if(ref.type==='top'){actions['project-name']();return;}else if(ref.type==='module'){const m=project.modules.find(m=>m.name===ref.id||m.id===ref.id);if(m){actions['module-view']({dataset:{id:m.name}});refreshIssueQueue();return;}}else{tab='advanced';selector=ref.type==='prelude'?'#a-prelude':'#a-advanced';}dialog.close();view('assembly');render();const el=selector?$(selector,selector==='#a-top-name'?switchbar:shell):$('.a-panel',shell);if(el){el.classList.add('r68-located');el.setAttribute('aria-invalid','true');el.scrollIntoView({block:'center'});el.focus();}}
   };
@@ -1374,6 +1642,11 @@
   Object.assign(actions,defineUI.actions,flowUI?.actions||{});
   Object.assign(actions,{
     'wb-practice-demo':()=>practiceStep(true),'wb-practice-check':()=>practiceStep(false),'wb-coach-toggle':()=>{practiceCoachExpanded=!practiceCoachExpanded;renderPracticeCoach();},
+    'group-view':()=>{activeModule='top';go('groupGraph');},
+    'group-select-all':()=>selectGroups(true),
+    'group-select-none':()=>selectGroups(false),
+    'group-svg':()=>exportGroupPicture('svg'),
+    'group-png':()=>exportGroupPicture('png'),
     'wb-graph':()=>{window.WIUBridge?.finish();activeModule='top';go('graph');},
     'wb-open':b=>openSheet(b.dataset.id), 'wb-add':newSheet,
     'wb-start-design':()=>{tab='graph';openSheet('top');},
@@ -1382,7 +1655,7 @@
     'wb-recovered':b=>recoveredSheet(b.dataset.id),
     'discard-recovered':b=>{const entry=project.workbook.recovered.find(x=>x.id===b.dataset.id);if(!entry)return;
       confirmAction('捨棄舊版保留圖面？','<p>只移除「'+esc(entry.label)+'」這份尚未加入模組的保留圖面，可復原。</p>','捨棄圖面',()=>commit(()=>{project.workbook.recovered=project.workbook.recovered.filter(x=>x.id!==entry.id);},'已捨棄保留圖面，可復原。'));},
-    'wb-child-rtl':()=>{const m=W.moduleOf(project,activeModule);download(m.name+'.v',m.source||W.skeleton(m));toast(m.interfaceOnly?'已下載介面骨架；尚未加入功能邏輯。':'已下載保存的 RTL 來源。');},
+    'wb-child-rtl':downloadChildSource,
     'graph-port-step':b=>graphPortStep(b.dataset.id,b.dataset.step),'graph-disconnect':b=>{const row=A.pinRows(project).find(r=>r.key===b.dataset.id);if(row){finishGraphConnection();commit(()=>A.applyConnections(project,[{instance:row.instance,port:row.port.name,expr:null}]),'已取消接線；Ctrl+Z 復原');}},'wb-pin':(b,e)=>graphPin(b.dataset.id,e,b.hasAttribute('data-graph-wire-pad')),'wb-pin-cancel':()=>{finishGraphConnection();refreshGraphConnection();},'graph-connect-mode':()=>{graphConnectMode=!graphConnectMode;graphQuickConnect=false;graphStart='';clearGraphNetFocus();refreshGraphConnection();},
     'wb-tour':showTour,'wb-tour-prev':()=>{tourStep=Math.max(0,tourStep-1);showTour();},
     'wb-tour-next':()=>{if(tourStep===tourStops.length-1)closeTour();else{tourStep++;showTour();}},'wb-tour-close':closeTour,
@@ -1460,10 +1733,29 @@
   let graphSpace=false,graphPanDrag=null,graphSuppressClick=false;
   const graphEditable=t=>{const el=t?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"]');return !!(el&&!el.readOnly&&!el.disabled);};
   const graphActive=()=>currentView==='assembly'&&tab==='graph'&&!dialog.open&&!window.WIUManualOpen;
+  for(const eventName of ['copy','cut'])document.addEventListener(eventName,e=>{
+    if(!graphActive()||graphEditable(e.target)||!e.clipboardData)return;
+    if(eventName==='cut'&&graphObject?.kind!=='instance')return;
+    safe(()=>{
+      const payload=graphSignalPayload();if(!payload)return;
+      e.clipboardData.setData('text/plain',payload.text);e.preventDefault();e.stopImmediatePropagation();
+      toast('已複製 '+payload.count+' 個訊號。');
+      if(eventName==='cut')actions['instance-delete']({dataset:{id:graphObject.id}});
+    });
+  });
+  document.addEventListener('paste',e=>{
+    if(!graphActive()||graphEditable(e.target)||!e.clipboardData)return;
+    const text=e.clipboardData.getData('text/plain');
+    safe(()=>{
+      if(!window.SignalClipboard.decode(text))return;
+      e.preventDefault();e.stopImmediatePropagation();pasteGraphText(text);
+    });
+  });
   window.addEventListener('keydown',e=>{
     if(!graphActive()||graphEditable(e.target)||e.target.closest?.('#r111-find'))return;
     const mod=e.ctrlKey||e.metaKey,key=String(e.key).toLowerCase();
     const cmd=mod?({c:'copy',x:'cut',v:'paste',d:'duplicate'})[key]:e.key==='Delete'?'delete':e.key==='F2'?'edit':null;
+    if(mod&&['c','x','v'].includes(key))return;
     if(cmd&&(graphObject?.kind==='instance'||cmd==='paste'||cmd==='delete'&&graphNetFocus.size===1)){e.preventDefault();e.stopImmediatePropagation();safe(()=>graphCommand(cmd));return;}
     if(e.key.startsWith('Arrow')&&e.target.closest?.('[data-graph-drag]'))return;
     if(e.code==='Space'&&e.target.closest?.('button,summary'))return;
@@ -1603,7 +1895,15 @@
   dialog.addEventListener('input',e=>{if(e.target.id!=='fg-tool-search')return;const query=e.target.value.trim().toLowerCase();let found=0;for(const item of $$('[data-tool-search]',dialog)){item.hidden=!item.dataset.toolSearch.includes(query);if(!item.hidden)found++;}$('#fg-tool-empty',dialog).hidden=found>0;});
   function setPendingField(el){if(el.value===el.defaultValue){clearPendingField(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='與目前設定相同';return;}const label=el.dataset.connection?(A.pinRows(project).find(r=>r.key===el.dataset.connection)?.instanceName+'.'+el.dataset.connection.split('::')[1]):el.dataset.wireName?'線名 '+el.dataset.wireName:el.id==='r124-name'?'模組名稱':'Top 名稱';const domKey=window.WIUInteractionR128.key(el),key=project.workbook.projectId+'::'+domKey;pendingField={element:el,label,key,domKey,projectId:project.workbook.projectId,tab,currentView};fieldDrafts.set(key,pendingField);el.dataset.r118Editing='true';el.setAttribute('aria-description','編輯中；Enter 或 Tab 套用，Esc 取消。');const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='編輯中 · Enter／Tab 套用 · Esc 取消';notifySaveState();}
   function clearPendingField(el){delete el.dataset.r118Editing;for(const [key,d] of fieldDrafts)if(d.element===el)fieldDrafts.delete(key);if(pendingField?.element===el)pendingField=null;notifySaveState();}
-  function handleInput(e){if(e.target.dataset.connection||e.target.dataset.wireName||e.target.dataset.net||e.target.dataset.assign||e.target.id==='a-top-name'){if(e.target.dataset.wireName)e.target.removeAttribute('aria-invalid');setPendingField(e.target);if(e.target.id==='a-top-name')inlineTop();return;}if(e.target.id==='ux-help-search'){helpQuery=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='help')return;const pos=e.target.selectionStart;render();const input=$('#ux-help-search',shell);input?.focus();input?.setSelectionRange?.(pos,pos);},180);return;}if(e.target.id!=='a-filter')return;if(graphTableOrigin)delete graphTableOrigin.pinKey;filter=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='connections')return;const focused=document.activeElement?.id==='a-filter',start=e.target.selectionStart,end=e.target.selectionEnd;render();if(focused){const input=$('#a-filter',shell);input.focus();input.setSelectionRange?.(start,end);}},180);}
+  function handleInput(e){if(e.target.hasAttribute('data-group-search')){
+    const q=e.target.value.trim().toLowerCase();
+    for(const fs of $$('.r133-choices fieldset',shell)){
+      const owner=$('legend',fs).textContent.toLowerCase();let matches=false;
+      for(const label of $$('label',fs)){label.hidden=!(owner+' '+label.textContent.toLowerCase()).includes(q);matches ||= !label.hidden;}
+      fs.hidden=!matches;
+    }
+    return;
+  }if(e.target.dataset.connection||e.target.dataset.wireName||e.target.dataset.net||e.target.dataset.assign||e.target.id==='a-top-name'){if(e.target.dataset.wireName)e.target.removeAttribute('aria-invalid');setPendingField(e.target);if(e.target.id==='a-top-name')inlineTop();return;}if(e.target.id==='ux-help-search'){helpQuery=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='help')return;const pos=e.target.selectionStart;render();const input=$('#ux-help-search',shell);input?.focus();input?.setSelectionRange?.(pos,pos);},180);return;}if(e.target.id!=='a-filter')return;if(graphTableOrigin)delete graphTableOrigin.pinKey;filter=e.target.value;clearTimeout(searchTimer);searchTimer=setTimeout(()=>{if(tab!=='connections')return;const focused=document.activeElement?.id==='a-filter',start=e.target.selectionStart,end=e.target.selectionEnd;render();if(focused){const input=$('#a-filter',shell);input.focus();input.setSelectionRange?.(start,end);}},180);}
   for(const el of [shell,switchbar])el.addEventListener('input',handleInput);
   window.addEventListener('keydown',e=>{const el=e.target;if(e.isComposing||e.keyCode===229||!(el?.dataset?.connection||el?.dataset?.net||el?.dataset?.assign||el?.id==='a-top-name'))return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();el.value=el.defaultValue;clearPendingField(el);window.WIUTextEditing?.reset(el);const note=el.closest('td')?.querySelector('[data-r118-edit-status]');if(note)note.textContent='已取消輸入';el.blur();inlineTop();}else if(e.key==='Enter'){e.preventDefault();e.stopImmediatePropagation();el.blur();}},true);
   window.addEventListener('fullscreenchange',()=>{if(window.WIUPresentation?.isOpen())return;document.body.classList.toggle('r82-fullscreen',!!document.fullscreenElement);const button=$('[data-action="graph-fullscreen"]',shell);if(button)button.textContent='⛶ 全螢幕看圖 F5';const exit=$('[data-fullscreen-exit]',shell);if(exit)exit.hidden=!(document.fullscreenElement||graphFocus);applyGraphZoom();});
@@ -1614,6 +1914,10 @@
   function cancelWireField(el){el.value=el.defaultValue;el.removeAttribute('aria-invalid');clearPendingField(el);window.WIUTextEditing?.reset(el);el.readOnly=true;delete el.dataset.wireEditing;el.blur();}
   shell.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||!e.target.matches('[data-wire-name]')||e.target.readOnly)return;if(e.key==='Escape'){e.preventDefault();cancelWireField(e.target);e.stopImmediatePropagation();}if(e.key==='Enter'||e.key==='Tab'){if(e.key==='Enter')e.preventDefault();if(applyWireField(e.target))e.target.blur();else e.preventDefault();e.stopImmediatePropagation();}},true);
   function handleChange(e){safe(()=>{const el=e.target;
+    if(el.hasAttribute('data-group-visible')){
+      if(el.checked)hiddenGroups.delete(el.dataset.groupVisible);else hiddenGroups.add(el.dataset.groupVisible);
+      refreshGroupPicture();return;
+    }
     if(el.dataset.layoutWidth){const width=Number(el.value);if(!Number.isFinite(width)||width<580||width>20000)throw Error('寬度需介於 580 與 20000。');changeInstanceLayout(el.dataset.layoutWidth,{width});return;}
     if(el.id==='r95-instance-select'){selectGraphInstance(el.value);return;}
     if(el.dataset.topStyle){commit(()=>{project.workbook.topStyle={...window.WIUDiagramStyle.settings(project),[el.dataset.topStyle]:el.value};});return;}
@@ -1639,9 +1943,9 @@
     e.stopImmediatePropagation();if(e.target.value)selectGraphGroup(e.target.value,false);else clearGraphNetFocus();
   },true);
   for(const el of [shell,switchbar])el.addEventListener('change',handleChange);shell.addEventListener('focusout',e=>{if(e.target.dataset.wireName&&e.target.dataset.wireEditing==='true'&&e.target.getAttribute('aria-invalid')!=='true')applyWireField(e.target);});
-  fileInput.addEventListener('change',async()=>{try{const files=[...fileInput.files];if(!files.length)return;if(files.some(f=>f.size>12*1024*1024))throw Error('單一檔案請小於 12 MB。');if(fileMode==='rtl'){const result={modules:[],issues:[],sources:[]};for(const f of files){const parsed=P.parseRtl(await f.text(),{config:project.defineConfig,filename:f.name});result.sources.push(...parsed.sources);parsed.modules.forEach(m=>m.filename=f.name);result.modules.push(...parsed.modules);result.issues.push(...parsed.issues);}importRtl(result,fileInput.dataset.moduleTarget||'');return;}const file=files[0];if(fileMode==='defines'){defineUI.imported(await file.text(),file.name);return;}if(fileMode==='define-include'){defineUI.includeEdit(null,await file.text(),file.name);return;}if(fileMode==='org'){previewOrg(await file.text(),file.name);return;}if(/\.(v|sv)$/i.test(file.name)){const result=P.parseRtl(await file.text(),{config:project.defineConfig,filename:file.name});result.modules.forEach(m=>m.filename=file.name);importRtl(result);return;}if(!/\.json$/i.test(file.name)){dialog.close();await window.__WSS_TEST__.loadProjectFile(file);return;}const data=JSON.parse(await file.text());if(data.format==='WrapItfUp-assembly'||data.schemaVersion!==undefined)previewWorkbook(data);else readLegacyDiagram(data);}catch(e){toast('載入失敗：'+e.message);}});
+  fileInput.addEventListener('change',async()=>{try{const files=[...fileInput.files];if(!files.length)return;if(files.some(f=>f.size>12*1024*1024))throw Error('單一檔案請小於 12 MB。');if(fileMode==='rtl'){const result={modules:[],issues:[],sources:[]};for(const f of files){const parsed=P.parseRtl(await f.text(),{config:project.defineConfig,filename:f.name});result.sources.push(...parsed.sources);parsed.modules.forEach(m=>m.filename=f.name);result.modules.push(...parsed.modules);result.issues.push(...parsed.issues);}importRtl(result,fileInput.dataset.moduleTarget||'');return;}const file=files[0];if(fileMode==='defines'){defineUI.imported(await file.text(),file.name);return;}if(fileMode==='define-include'){defineUI.includeEdit(null,await file.text(),file.name);return;}if(fileMode==='org'){previewOrg(await file.text(),file.name);return;}if(/\.(v|sv)$/i.test(file.name)){const result=P.parseRtl(await file.text(),{config:project.defineConfig,filename:file.name});result.modules.forEach(m=>m.filename=file.name);importRtl(result);return;}if(!/\.json$/i.test(file.name)&&!/^\s*\{/.test(await file.slice(0,512).text())){dialog.close();await window.__WSS_TEST__.loadProjectFile(file);return;}const data=JSON.parse(await file.text());if(data.format==='WrapItfUp-assembly'||data.schemaVersion!==undefined)previewWorkbook(data);else readLegacyDiagram(data);}catch(e){toast('載入失敗：'+e.message);}});
   // Capture before legacy shortcuts; only consume keys handled here, so native text editing survives.
-  window.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||window.WIUManualOpen||e.target.closest?.('#r111-find'))return;if(tourStep>=0&&e.key==='Escape'){closeTour();return;}if(currentView!=='assembly'&&!dialog.open)return;const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase(),editing=/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);if((e.altKey&&e.target.closest?.('[data-top-drag]'))||(e.key.startsWith('Arrow')&&e.target.closest?.('[data-wire-route]')))return;e.stopImmediatePropagation();if(dialog.open)return;if(e.key==='Escape'&&graphStart){finishGraphConnection();refreshGraphConnection();return;}if(e.target.dataset.wireName&&e.key==='Escape'){e.preventDefault();cancelWireField(e.target);return;}if(e.key==='Enter'&&editing&&e.target.tagName!=='TEXTAREA'){e.preventDefault();if(e.target.dataset.wireName&&!applyWireField(e.target))return;e.target.blur();return;}if(mod&&k==='s'){e.preventDefault();document.activeElement?.blur();saveProject();}else if(mod&&k==='o'){e.preventDefault();pick('project');}else if(mod&&!editing&&(k==='z'||k==='y')){e.preventDefault();k==='y'||e.shiftKey?redo():undo();}},true);
+  window.addEventListener('keydown',e=>{if(e.isComposing||e.keyCode===229||window.WIUManualOpen||e.target.closest?.('#r111-find,.wire-inline-editor'))return;if(tourStep>=0&&e.key==='Escape'){closeTour();return;}if(currentView!=='assembly'&&!dialog.open)return;const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase(),editing=/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);if((e.altKey&&e.target.closest?.('[data-top-drag]'))||(e.key.startsWith('Arrow')&&e.target.closest?.('[data-wire-route]')))return;e.stopImmediatePropagation();if(dialog.open)return;if(e.key==='Escape'&&graphStart){finishGraphConnection();refreshGraphConnection();return;}if(e.target.dataset.wireName&&e.key==='Escape'){e.preventDefault();cancelWireField(e.target);return;}if(e.key==='Enter'&&editing&&e.target.tagName!=='TEXTAREA'){e.preventDefault();if(e.target.dataset.wireName&&!applyWireField(e.target))return;e.target.blur();return;}if(mod&&k==='s'){e.preventDefault();document.activeElement?.blur();saveProject();}else if(mod&&k==='o'){e.preventDefault();pick('project');}else if(mod&&!editing&&(k==='z'||k==='y')){e.preventDefault();k==='y'||e.shiftKey?redo():undo();}},true);
   window.addEventListener('beforeunload',e=>{if(dirty()||practiceReturn&&JSON.stringify(practiceReturn.project)!==practiceReturn.saved){e.preventDefault();e.returnValue='';}});
   window.WIUWorkspaceUI={selectionContext:()=>{const o=graphObject;if(!o)return null;const i=o.kind==='instance'&&project.instances.find(i=>i.id===o.id),m=i&&project.modules.find(m=>m.name===i.module);return {...o,name:i?.name||o.id,moduleId:m?.id,moduleName:m?.name,count:graphNetFocus.size};},dispatch:(button,event)=>safe(()=>button.dataset.tab?go(button.dataset.tab):actions[button.dataset.action]?.(button,event)),context:()=>stageNav(),moduleContext:()=>diagramBar.hidden?'':diagramBar.innerHTML,zoom:setGraphZoom};
   window.__WIU_ASSEMBLY__={getProject:()=>A.clone(project),loadProject:p=>{graphNeedsPrepare=true;graphNetFocus.clear();graphDirectNetFocus.clear();graphGroupFocus.clear();graphObject=null;graphTableOrigin=null;graphPinHint='';graphStart='';graphConnectMode=false;graphQuickConnect=false;return commit(()=>{project=W.normalize(p);resetFilters();focusedPin='';lessonTask='';tab=L.isLearning(project)?'lesson':'connections';});},render,view,issues,getSession:()=>({kind:sessionKind,activeModule,workspace:workspace()}),openSheet,snapshot:workbookSnapshot,learningTasks:()=>L?.tasks(project)||[]};

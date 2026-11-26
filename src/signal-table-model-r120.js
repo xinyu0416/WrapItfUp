@@ -1,7 +1,7 @@
 (function(root,factory){const api=factory();root.WIUSignalTableModel=api;if(typeof module==='object')module.exports=api;})(globalThis,function(){
 'use strict';
-const fields=['name','bits','direction','side','group','comment','condition'];
-const aliases={name:'name',signal:'name','訊號名稱':'name','名稱':'name',bits:'bits',width:'bits',range:'bits','位寬':'bits',direction:'direction',dir:'direction','方向':'direction',side:'side','位置':'side',group:'group','群組':'group',comment:'comment','註解':'comment','備註':'comment',condition:'condition',ifdef:'condition','條件':'condition'};
+const fields=['name','bits','direction','side','group','comment','condition','waveType'];
+const aliases={name:'name',signal:'name','訊號名稱':'name','名稱':'name',bits:'bits',width:'bits',range:'bits','位寬':'bits',direction:'direction',dir:'direction','方向':'direction',side:'side','位置':'side',group:'group','群組':'group',comment:'comment','註解':'comment','備註':'comment',wavetype:'waveType',wave:'waveType','波形類型':'waveType',condition:'condition',ifdef:'condition','條件':'condition'};
 const dirs={in:'input',input:'input',out:'output',output:'output','i/o':'inout',inout:'inout'};
 const sides={l:'left',left:'left','左':'left','左側':'left',r:'right',right:'right','右':'right','右側':'right'};
 function parse(text,{startField='name',columns=fields}={}){
@@ -34,6 +34,7 @@ function plan(current,parsed,{mode='append',startId=null,targetIds=null,defaultS
   add('name',validateName(r.name)||validateSignalName(r.name));add('bits',!String(r.bits).trim()?'位寬不可空白。':validateWidth(r.bits));
   if(!['input','output','inout'].includes(r.direction))add('direction','方向只能是 IN、OUT、I/O。');
   if(!['left','right'].includes(r.side))add('side','位置只能是左或右。');
+  if(r.waveType&&!['auto','signal','data','clock'].includes(r.waveType))add('waveType','波形類型只能是 auto、signal、data、clock。');
   try{condition(r.condition);}catch(e){add('condition',e.message);}
   if(r.name&&!/^\s*\/\//.test(r.name)&&rows.some(x=>x!==r&&!x.spacer&&!/^\s*\/\//.test(x.name)&&x.name===r.name))add('name','重複名稱：'+r.name);
  }

@@ -188,6 +188,7 @@
     const api = core();
     if (typeof name !== 'string' || !IDENT.test(name) || (api && !api.validName(name))) throw Error('請使用有效的 Verilog net 名稱。');
     if (name === net.name) return project;
+    if(arr(project.instances).some(i=>i.name===name)||arr(project.parameters).some(p=>p.name===name))throw Error('此名稱已由 instance 或 Top 參數使用。');
     if (arr(project.nets).some(n => n !== net && n.name.toLowerCase() === name.toLowerCase())) throw Error('Net 名稱重複或只有大小寫不同。');
     if (hasOpaqueReferences(project, api)) {
       throw Error('專案含有未解析的原始內容；請先處理進階內容，再重新命名 net，以免遺漏參照。');

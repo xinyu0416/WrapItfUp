@@ -61,7 +61,7 @@ function exportVbs(scene,{metadata='',name='wrapper-r92-routed',limit=Infinity}=
    cell('LineColor',rgb(s.color));cell('LineWeight',f((s.weight||1)*72/unit)+' pt');cell('LinePattern',s.dash?'2':'1');
   }else if(s.type==='ellipse'){
    add(`Set shp = page.DrawOval(${X(s.x)}, ${Y(s.y+s.height)}, ${X(s.x+s.width)}, ${Y(s.y)})`);
-   cell('LinePattern','0');cell('FillPattern','1');cell('FillForegnd',rgb(s.fill||s.color));
+   cell('LinePattern',s.weight>0?'1':'0');cell('LineColor',rgb(s.color));cell('LineWeight',f((s.weight||0)*72/unit)+' pt');cell('FillPattern','1');cell('FillForegnd',rgb(s.fill||s.color));
   }else{
    add(`Set shp = page.DrawRectangle(${X(s.x)}, ${Y(s.y+s.height)}, ${X(s.x+s.width)}, ${Y(s.y)})`);
    if(s.type==='rect'){

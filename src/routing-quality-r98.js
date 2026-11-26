@@ -60,7 +60,7 @@ function valid(pts,edge,scene,ctx){
  // its owner Block's 28px moat; no wire may touch any foreign pad glyph.
  for(let i=0;i<pts.length-1;i++){
   const a=pts[i],b=pts[i+1],lanes=scene.topBoundary.lanes;
-  if(lanes&&eq(a.x,b.x)&&(a.x<top.left+64+lanes.left*lanes.pitch||a.x>top.right-64-lanes.right*lanes.pitch)&&![src.trackX,dst.trackX].some(x=>Number.isFinite(x)&&eq(x,a.x)))return false;
+  if(lanes&&eq(a.x,b.x)&&(a.x<top.left+64+lanes.left*lanes.pitch||a.x>top.right-64-lanes.right*lanes.pitch)&&![src.trackX,dst.trackX,src.splitNetId&&src.splitNetId===edge.routeKey?.split('|').at(-1)?src.x+(src.side==='right'?28:-28):null].some(x=>Number.isFinite(x)&&eq(x,a.x)))return false;
   // Keep ALL geometry outside the top title cap + two-pad-width corridor.
   if(Math.min(a.y,b.y)<top.top+MOAT-EPS)return false;
   if(Math.max(a.y,b.y)>top.bottom-MOAT+EPS||Math.min(a.x,b.x)<top.left-EPS||Math.max(a.x,b.x)>top.right+EPS)return false;

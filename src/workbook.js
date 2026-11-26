@@ -19,8 +19,40 @@ function normalize(input,previous){
   i.nameBinding=i.name.startsWith(prefix)&&/^(?:_?\d+)?$/.test(suffix)?{mode:'module',suffix,lastGenerated:i.name}:{mode:'custom',lastGenerated:i.name};
  }
  const ids=new Set(['top']);
- for(const m of p.modules){const before=arr(old.modules).find(x=>x.id&&x.id===m.id)||arr(old.modules).find(x=>x.name===m.name);m.id=m.id||before?.id||uid();if(ids.has(m.id))throw Error('Module ID 重複。');ids.add(m.id);const pins=new Set();for(const port of m.ports){port.id=port.id||before?.ports.find(x=>x.name===port.name)?.id||uid();if(pins.has(port.id))throw Error('Port ID 重複。');pins.add(port.id);}}
+ for(const m of p.modules){
+  const before=arr(old.modules).find(x=>x.id&&x.id===m.id)||arr(old.modules).find(x=>x.name===m.name);
+  m.id=m.id||before?.id||uid();if(ids.has(m.id))throw Error('Module ID 重複。');ids.add(m.id);
+  const pins=new Set(),priorById=new Map(arr(before?.ports).map(x=>[x.id,x])),priorByName=new Map(arr(before?.ports).map(x=>[x.name,x]));
+  for(const port of m.ports){
+   const prior=(port.id&&priorById.get(port.id))||priorByName.get(port.name);
+   port.id=port.id||prior?.id||uid();if(pins.has(port.id))throw Error('Port ID 重複。');pins.add(port.id);
+   // Re-parsing RTL changes electrical declarations, not a user's waveform choice.
+   if(port.waveType==null&&prior?.waveType!=null){port.waveType=prior.waveType;if(prior.beforeClockType!=null)port.beforeClockType=prior.beforeClockType;}
+  }
+ }
+ if(previous){
+  const byId=new Map(arr(previous.nets).map(n=>[n.id,n])),byName=new Map(arr(previous.nets).map(n=>[n.name,n]));
+  for(const net of p.nets){const prior=(net.id&&byId.get(net.id))||byName.get(net.name);if(net.waveType==null&&prior?.waveType!=null){net.waveType=prior.waveType;if(prior.beforeClockType!=null)net.beforeClockType=prior.beforeClockType;}}
+ }
  for(const id of Object.keys(p.workbook.diagrams)){if(ids.has(id))p.workbook.diagrams[id]=makeDiagram(p,id);else delete p.workbook.diagrams[id];}
+ if(p.workbook.wireLabels){
+  const nets=new Map(p.nets.map(n=>[n.id,n])),ends=new Map();
+  for(const n of p.nets)if(n.direction!=='wire')ends.set('top::'+n.id,n.name);
+  const modules=new Map(p.modules.map(m=>[m.name,new Map(m.ports.map(pin=>[pin.name,pin.id||pin.name]))]));
+  const instances=new Map(p.instances.map(i=>[i.id,modules.get(i.module)]));
+  for(const c of p.connections){
+   const pin=instances.get(c.instance)?.get(c.port);
+   if(pin&&c.expr)ends.set(c.instance+'::'+pin,c.expr);
+  }
+  const labels=arr(p.workbook.wireLabels).filter(l=>{
+   if(!l||typeof l.text!=='string'||!l.text.trim()||!Number.isFinite(l.at)||typeof l.routeKey!=='string')return false;
+   const [source,target,id]=l.routeKey.split('|'),net=nets.get(l.netId);
+   if(!net||id!==l.netId||!ends.has(source)||!ends.has(target))return false;
+   if(target.startsWith('top::'))return net.name===ends.get(target);
+   try{return C().parseExpression(C().expandDefines(ends.get(target),p)).name===net.name;}catch{return false;}
+  });
+  if(labels.length)p.workbook.wireLabels=labels;else delete p.workbook.wireLabels;
+ }
  syncGeneratedNetNames(p);
  return p;
 }
@@ -74,7 +106,8 @@ function makeDiagram(p,id){
  const d=old?clone(old):{moduleName:m.name,parameters:'',signals:{left:[],right:[]},groups:{left:[],right:[]},conditions:{left:[],right:[]},rtlOrder:[],layout:{blockX:650,blockY:48,blockWidth:500,blockHeight:420,leftSignalX:530,rightSignalX:1270}};
  const all=[...d.signals.left,...d.signals.right];d.moduleName=m.name;d.parameters=arr(m.parameters).map(x=>(x.local?'localparam ':'parameter ')+(x.type?x.type+' ':'')+x.name+' = '+x.value).join(', ');
  const next={left:[],right:[]};
- for(const port of m.ports){const prior=all.find(s=>s.id===port.id)||all.find(s=>s.name===port.name),side=prior?(d.signals.left.includes(prior)?'left':'right'):port.direction==='output'?'right':'left';const sig={...(prior||{}),id:port.id,name:port.name,direction:port.direction,bits:port.range||'1',signed:!!port.signed,comment:port.comment??prior?.comment??'',conditionId:null};
+ for(const port of m.ports){const prior=all.find(s=>s.id===port.id)||all.find(s=>s.name===port.name),side=prior?(d.signals.left.includes(prior)?'left':'right'):port.direction==='output'?'right':'left';const sig={...(prior||{}),id:port.id,name:port.name,direction:port.direction,bits:port.range||'1',waveType:port.waveType??prior?.waveType??'auto',...((port.waveType??prior?.waveType)==='clock'&&['auto','signal','data'].includes(port.beforeClockType??prior?.beforeClockType)?{beforeClockType:port.beforeClockType??prior?.beforeClockType}:{}),signed:!!port.signed,comment:port.comment??prior?.comment??'',conditionId:null};
+  if(sig.waveType!=='clock')delete sig.beforeClockType;
   if(!prior&&port.group){let g=d.groups[side].find(x=>x.name===port.group);if(!g){g={id:'auto_'+side+'_'+crc(m.id+'::'+port.group),name:port.group,color:['#68778c','#806596','#5d427c','#8c6f4e','#4f6382','#856d96'][d.groups[side].length%6]};d.groups[side].push(g);}sig.groupId=g.id;}
   next[side].push(sig);
  }
@@ -247,7 +280,12 @@ function applyDiagram(project,id,raw,parsed){
  if(issues.length)throw Error(issues.map(x=>x.message).join('\n'));
  if(!C().validName(d.moduleName))throw Error('Module 名稱需為合法 Verilog 識別字。');
  if((id!=='top'&&d.moduleName===p.top)||p.modules.some(m=>m.id!==id&&m.name===d.moduleName))throw Error('Module 名稱已被使用。');
- const signals=[...d.signals.left,...d.signals.right],ports=parsed.ports.map(port=>{const sig=signals.find(s=>s.name===port.name);const previous=old.ports.find(x=>x.id===sig?.id)||old.ports.find(x=>x.name===port.name);return {...port,id:previous?.id||sig?.id||uid(),comment:port.comment||sig?.comment||''};});
+ const signals=[...d.signals.left,...d.signals.right],ports=parsed.ports.map(port=>{const sig=signals.find(s=>s.name===port.name);const previous=old.ports.find(x=>x.id===sig?.id)||old.ports.find(x=>x.name===port.name);const side=d.signals.left.includes(sig)?'left':'right';
+ const priorSig=arr(p.workbook.diagrams[id]?.signals?.[side]).find(s=>s.id===sig?.id);
+ const group=groupLabel(d,side,sig?.groupId)||(!priorSig?.groupId&&previous?.group)||'';
+ const nextPort={...previous,...port,id:previous?.id||sig?.id||uid(),group,waveType:['signal','data','clock'].includes(sig?.waveType)?sig.waveType:'auto',comment:sig?.comment??port.comment??''};
+ if(nextPort.waveType==='clock'&&['auto','signal','data'].includes(sig?.beforeClockType))nextPort.beforeClockType=sig.beforeClockType;else delete nextPort.beforeClockType;
+ return nextPort;});
  const next={name:d.moduleName,ports,parameters:parsed.parameters||[]};
  const structural=interfaceKey(old)!==interfaceKey(next);
  const sourceEdit=id!=='top'&&!old.interfaceOnly&&structural?rtlInterfaceEditor().patch(p,old,next,physicalModules,mayInstantiate):null;
@@ -265,7 +303,9 @@ function applyDiagram(project,id,raw,parsed){
  for(const port of old.ports){const updated=ports.find(x=>x.id===port.id);if(!updated){changes.push(port.name+(id==='top'?' 已移除，相關引用一併清理':' 已移除；原接線保留待修正'));continue;}if(port.name!==updated.name)changes.push(port.name+' → '+updated.name);if(port.range!==updated.range||port.direction!==updated.direction)changes.push(updated.name+' 的位寬／方向已更新，請檢查接線');}
  if(id==='top'){
   if(ports.some(x=>p.nets.some(n=>n.direction==='wire'&&n.name===x.name)))throw Error('Top 接腳與內部線名稱重複。');
-  p.top=next.name;p.parameters=next.parameters;p.nets=p.nets.filter(n=>n.direction==='wire').concat(ports);
+  p.top=next.name;p.parameters=next.parameters;
+  // Presentation-only edits must not reorder declarations or change HDL bytes.
+  p.nets=structural?p.nets.filter(n=>n.direction==='wire').concat(ports):p.nets.map(n=>n.direction==='wire'?n:ports.find(port=>port.id===n.id)||n);
  }else{
   const m=p.modules.find(x=>x.id===id);const oldFile=m.sourceFilename||m.filename;
   if(structural){if(p.rtlSources.some(x=>x.name!==oldFile&&x.name.toLowerCase()===(next.name+'.v').toLowerCase()))throw Error('新名稱與保存的 RTL 來源檔重複。');const affected=p.instances.filter(i=>i.module===m.name),planned=affected.map(i=>({i,name:next.name!==m.name&&i.nameBinding?.mode==='module'?next.name+'_inst'+i.nameBinding.suffix:i.name}));
@@ -299,6 +339,22 @@ function envelope(project,workspace={},kind='user'){
  const p=normalize(project),body={format:'WrapItfUp',schemaVersion:1,appVersion:String((root.WIURelease||(typeof require==='function'?require('./release'):null)).number),scope:'project',origin:kind==='practice'?'practice':'user',project:p,workspace:clone(workspace)};
  return {...body,savedAt:new Date().toISOString(),integrity:{algorithm:'crc32',value:crc(stable(body))}};
 }
+function recoverOrgLayout(p){
+ if(p.orgLayout||!p.originalOrg||!p.advanced||p.importLayoutUnsafe)return;
+ const restored=P().importOrg(p.originalOrg,p.modules,{recoverSavedLayout:true});
+ // Older workbooks kept ordinary headings in advanced. Move only the exact
+ // original text, leaving any subsequently edited advanced program intact.
+ if(restored.previousAdvanced!==p.advanced)return;
+ const source=restored.project,layout=source.orgLayout;
+ const byId=new Map(p.nets.map(n=>[n.id,n])),byName=new Map(p.nets.map(n=>[n.name,n])),before={};
+ for(const n of source.nets){
+  const current=byId.get(n.id)||byName.get(n.name);if(!current)continue;
+  if(!current.group&&n.group)current.group=n.group;
+  if(n.orgCommentDirective)current.orgCommentDirective=true;
+  if(layout.before[n.id])before[current.id]=layout.before[n.id];
+ }
+ p.advanced=source.advanced;p.orgLayout={...layout,before};
+}
 function read(raw){
  if(!raw||typeof raw!=='object')throw Error('專案檔案格式錯誤。');
  if(raw.format==='WrapItfUp'&&raw.schemaVersion!==undefined){
@@ -306,7 +362,7 @@ function read(raw){
   const body={};for(const k of ['format','schemaVersion','appVersion','scope','origin','project','workspace']){if(raw[k]===undefined)throw Error('專案缺少 '+k);body[k]=raw[k];}
   if(raw.integrity?.algorithm!=='crc32'||raw.integrity.value!==crc(stable(body)))throw Error('專案資料校驗失敗；請使用完整原始下載檔。');
   if(!['user','practice'].includes(raw.origin))throw Error('無效的專案來源。');
-  const p=normalize(raw.project),warnings=[];
+  const p=normalize(raw.project),warnings=[];recoverOrgLayout(p);
   // r86 readability migration: old versions stored the dense curve default.
   // Explicit users can restore curve with the visible Top route toggle.
   if(Number(raw.appVersion)<86&&p.workbook.topStyle?.route==='curve'){
@@ -317,7 +373,7 @@ function read(raw){
  }
  if(raw.format==='WrapItfUp-assembly'){
   if(!Number.isInteger(raw.version)||raw.version<56||raw.version>63)throw Error('不支援這個舊專案版本。');
-  const p=normalize(raw.project),warnings=[];if(raw.diagram){p.workbook.recovered.push({id:uid(),label:'舊版獨立介面圖',diagram:clone(raw.diagram)});warnings.push('舊版介面圖已獨立保留，請核對後加入模組頁；不會覆蓋接線。');}
+  const p=normalize(raw.project),warnings=[];recoverOrgLayout(p);if(raw.diagram){p.workbook.recovered.push({id:uid(),label:'舊版獨立介面圖',diagram:clone(raw.diagram)});warnings.push('舊版介面圖已獨立保留，請核對後加入模組頁；不會覆蓋接線。');}
   return {project:p,workspace:{activeModule:'top',tab:'modules',view:'assembly'},origin:p.learning||p.flow?.tutorial?'practice':'user',warnings};
  }
  throw Error('請載入 WrapItfUp 專案，或原始可還原圖檔。');
